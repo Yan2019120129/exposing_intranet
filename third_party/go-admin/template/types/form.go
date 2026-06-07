@@ -345,8 +345,10 @@ type FormPanel struct {
 
 	primaryKey primaryKey
 
-	UpdateFn FormPostFn `json:"update_fn"`
-	InsertFn FormPostFn `json:"insert_fn"`
+	UpdateFn       FormPostFn       `json:"update_fn"`
+	InsertFn       FormPostFn       `json:"insert_fn"`
+	UpdateFnWithDB FormPostFnWithDB `json:"-"`
+	InsertFnWithDB FormPostFnWithDB `json:"-"`
 
 	IsHideContinueEditCheckBox bool `json:"is_hide_continue_edit_check_box"`
 	IsHideContinueNewCheckBox  bool `json:"is_hide_continue_new_check_box"`
@@ -1549,8 +1551,18 @@ func (f *FormPanel) SetUpdateFn(fn FormPostFn) *FormPanel {
 	return f
 }
 
+func (f *FormPanel) SetUpdateFnWithDB(fn FormPostFnWithDB) *FormPanel {
+	f.UpdateFnWithDB = fn
+	return f
+}
+
 func (f *FormPanel) SetInsertFn(fn FormPostFn) *FormPanel {
 	f.InsertFn = fn
+	return f
+}
+
+func (f *FormPanel) SetInsertFnWithDB(fn FormPostFnWithDB) *FormPanel {
+	f.InsertFnWithDB = fn
 	return f
 }
 
@@ -1743,6 +1755,7 @@ func (f *FormPanel) GetNewFormFields(sql ...func() *db.SQL) (FormFields, []FormF
 type (
 	FormPreProcessFn  func(values form.Values) form.Values
 	FormPostFn        func(values form.Values) error
+	FormPostFnWithDB  func(db *db.SQL, values form.Values) error
 	FormFields        []FormField
 	GroupFormFields   []FormFields
 	GroupFieldHeaders []string

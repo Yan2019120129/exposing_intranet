@@ -1,9 +1,9 @@
 package cmd
 
 import (
-	"car/app"
-	"car/cmd/app/console"
-	"car/cmd/app/server"
+	"my-base/app"
+	"my-base/cmd/app/console"
+	"my-base/cmd/app/server"
 	"os"
 
 	"github.com/spf13/cobra"

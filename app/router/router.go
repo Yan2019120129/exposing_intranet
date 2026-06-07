@@ -1,7 +1,7 @@
 package router
 
 import (
-	"car/app/apis"
+	"my-base/app/apis"
 
 	"github.com/gin-gonic/gin"
 )

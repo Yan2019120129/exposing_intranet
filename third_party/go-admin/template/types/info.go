@@ -531,6 +531,7 @@ func (t TabHeaders) Add(header string) TabHeaders {
 type GetDataFn func(param parameter.Parameters) ([]map[string]interface{}, int)
 
 type DeleteFn func(ids []string) error
+type DeleteFnWithDB func(db *db.SQL, ids []string) error
 type DeleteFnWithRes func(ids []string, res error) error
 
 type Sort uint8
@@ -597,9 +598,10 @@ type InfoPanel struct {
 
 	TableLayout string
 
-	DeleteHook  DeleteFn
-	PreDeleteFn DeleteFn
-	DeleteFn    DeleteFn
+	DeleteHook     DeleteFn
+	PreDeleteFn    DeleteFn
+	DeleteFn       DeleteFn
+	DeleteFnWithDB DeleteFnWithDB
 
 	DeleteHookWithRes DeleteFnWithRes
 
@@ -988,6 +990,11 @@ func (i *InfoPanel) SetPreDeleteFn(fn DeleteFn) *InfoPanel {
 
 func (i *InfoPanel) SetDeleteFn(fn DeleteFn) *InfoPanel {
 	i.DeleteFn = fn
+	return i
+}
+
+func (i *InfoPanel) SetDeleteFnWithDB(fn DeleteFnWithDB) *InfoPanel {
+	i.DeleteFnWithDB = fn
 	return i
 }
 

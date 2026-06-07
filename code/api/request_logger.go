@@ -1,7 +1,7 @@
 package api
 
 import (
-	"car/code/logger"
+	"my-base/code/logger"
 	"strings"
 
 	"github.com/gin-gonic/gin"

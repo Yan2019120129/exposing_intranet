@@ -1,7 +1,7 @@
 package console
 
 import (
-	"car/app/models"
+	"my-base/app/models"
 
 	"github.com/spf13/cobra"
 )

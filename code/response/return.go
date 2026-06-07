@@ -1,7 +1,7 @@
 package response
 
 import (
-	"car/code"
+	"my-base/code"
 	"net/http"
 
 	"github.com/gin-gonic/gin"

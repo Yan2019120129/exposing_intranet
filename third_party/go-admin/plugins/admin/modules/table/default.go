@@ -703,7 +703,7 @@ func (tb *DefaultTable) GetDataWithId(param parameter.Parameters) (FormInfo, err
 		}
 
 		if len(joinTables) > 0 {
-			if connection.Name() == db.DriverMssql  || connection.Name() == db.DriverPostgresql {
+			if connection.Name() == db.DriverMssql || connection.Name() == db.DriverPostgresql {
 				groupBy = " GROUP BY " + groupFields
 			} else {
 				groupBy = " GROUP BY " + pk
@@ -794,6 +794,15 @@ func (tb *DefaultTable) UpdateData(ctx *context.Context, dataList form.Values) e
 		dataList = tb.Form.PreProcessFn(dataList)
 	}
 
+	if tb.Form.UpdateFnWithDB != nil {
+		dataList.Delete(form.PostTypeKey)
+		err = tb.Form.UpdateFnWithDB(tb.sql(), tb.PreProcessValue(dataList, types.PostTypeUpdate))
+		if err != nil {
+			errMsg = "post error: " + err.Error()
+		}
+		return err
+	}
+
 	if tb.Form.UpdateFn != nil {
 		dataList.Delete(form.PostTypeKey)
 		err = tb.Form.UpdateFn(tb.PreProcessValue(dataList, types.PostTypeUpdate))
@@ -864,6 +873,15 @@ func (tb *DefaultTable) InsertData(ctx *context.Context, dataList form.Values) e
 
 	if f.PreProcessFn != nil {
 		dataList = f.PreProcessFn(dataList)
+	}
+
+	if f.InsertFnWithDB != nil {
+		dataList.Delete(form.PostTypeKey)
+		err = f.InsertFnWithDB(tb.sql(), tb.PreProcessValue(dataList, types.PostTypeCreate))
+		if err != nil {
+			errMsg = "post error: " + err.Error()
+		}
+		return err
 	}
 
 	if f.InsertFn != nil {
@@ -1038,6 +1056,11 @@ func (tb *DefaultTable) DeleteData(id string) error {
 		}
 	}
 
+	if tb.Info.DeleteFnWithDB != nil {
+		err = tb.Info.DeleteFnWithDB(tb.sql(), idArr)
+		return err
+	}
+
 	if tb.Info.DeleteFn != nil {
 		err = tb.Info.DeleteFn(idArr)
 		return err
@@ -1139,7 +1162,7 @@ func (tb *DefaultTable) getColumns(table string) (Columns, bool) {
 	columnsModel, _ := tb.sql().Table(table).ShowColumns()
 
 	columns := make(Columns, len(columnsModel))
-	defer func(){
+	defer func() {
 		fmt.Println("getColumns columns", columns)
 	}()
 	switch tb.connectionDriver {

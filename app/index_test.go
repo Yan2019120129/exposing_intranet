@@ -2,10 +2,10 @@ package app
 
 import (
 	"bytes"
-	"car/app/models"
-	appRouter "car/app/router"
-	orm "car/module/gorm"
 	"encoding/json"
+	"my-base/app/models"
+	appRouter "my-base/app/router"
+	orm "my-base/module/gorm"
 	"net/http"
 	"net/http/httptest"
 	"strconv"

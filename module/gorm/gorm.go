@@ -1,9 +1,9 @@
 package orm
 
 import (
-	"car/configs"
 	"fmt"
 	"log"
+	"my-base/configs"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"

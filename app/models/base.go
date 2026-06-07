@@ -1,7 +1,7 @@
 package models
 
 import (
-	orm "car/module/gorm"
+	orm "my-base/module/gorm"
 	"time"
 )
 

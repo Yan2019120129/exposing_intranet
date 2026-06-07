@@ -1,10 +1,10 @@
 package service
 
 import (
-	"car/app/models"
-	"car/app/service/dto"
-	"car/code/service"
 	"errors"
+	"my-base/app/models"
+	"my-base/app/service/dto"
+	"my-base/code/service"
 	"strings"
 
 	"gorm.io/gorm"

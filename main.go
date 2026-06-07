@@ -1,7 +1,7 @@
 package main
 
 import (
-	"car/cmd"
+	"my-base/cmd"
 
 	_ "github.com/GoAdminGroup/go-admin/adapter/gin"              // web framework adapter
 	_ "github.com/GoAdminGroup/go-admin/modules/db/drivers/mysql" // sql driver

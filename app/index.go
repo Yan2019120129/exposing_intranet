@@ -1,15 +1,15 @@
 package app
 
 import (
-	"car/app/router"
-	"car/configs"
-	orm "car/module/gorm"
-	"car/pages"
-	"car/tables"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"my-base/app/router"
+	"my-base/configs"
+	orm "my-base/module/gorm"
+	"my-base/pages"
+	"my-base/tables"
 	"net/http"
 	"os"
 	"os/signal"

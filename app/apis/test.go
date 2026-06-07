@@ -1,11 +1,11 @@
 package apis
 
 import (
-	"car/app/models"
-	"car/app/service"
-	"car/app/service/dto"
-	"car/code/api"
 	"errors"
+	"my-base/app/models"
+	"my-base/app/service"
+	"my-base/app/service/dto"
+	"my-base/code/api"
 	"net/http"
 	"strconv"
 
@@ -33,7 +33,7 @@ func (e Test) List(ctx *gin.Context) {
 		Errors
 	if err != nil {
 		e.Logger.Error(err)
-		e.Error(500, err, err.Error())
+		e.Error(http.StatusInternalServerError, err, err.Error())
 		return
 	}
 

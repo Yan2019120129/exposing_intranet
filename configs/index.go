@@ -1,8 +1,8 @@
 package configs
 
 import (
-	"car/configs/gorm"
 	"fmt"
+	"my-base/configs/gorm"
 	"os"
 	"path/filepath"
 
