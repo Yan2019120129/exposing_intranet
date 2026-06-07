@@ -32,7 +32,7 @@ const (
 // SetColor 设置颜色
 func SetColor(color Color, msg interface{}, isBold bool) string {
 	if isBold {
-		return fmt.Sprintf("%v%v%v%v%v", color, Bold, msg, Reset)
+		return fmt.Sprintf("%v%v%v%v", color, Bold, msg, Reset)
 	}
 	return fmt.Sprintf("%v%v%v", color, msg, Reset)
 }

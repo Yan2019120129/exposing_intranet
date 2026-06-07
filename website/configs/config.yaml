@@ -1,0 +1,133 @@
+# 服务监听端口
+port: "1050"
+
+gorm:
+  # 是否启用全字段查询
+  query-fields: true
+  # 是否关闭单表复数形式
+  singular-table: true
+admin:
+  database:
+    default:
+      # 数据库服务器地址
+      host: "127.0.0.1"
+      # 数据库端口
+      port: "3306"
+      # 数据库用户名
+      user: "yan"
+      # 数据库密码
+      pwd: "Aa123098.."
+      # 数据库名
+      name: "base"
+      # 数据库驱动类型
+      driver: "mysql"
+      # 最大空闲连接数
+      max_idle_con: 5
+      # 最大活跃连接数
+      max_open_con: 10
+      # 最大连接寿命（纳秒）
+      conn_max_life_time: "1h"
+
+  logger:
+    encoder:
+      # 时间键名
+      time_key: "ts"
+      # 日志级别键名
+      level_key: "level"
+      # 日志记录器名称键名
+      name_key: "logger"
+      # 调用者信息键名
+      caller_key: "caller"
+      # 消息键名
+      message_key: "msg"
+      # 堆栈跟踪键名
+      stacktrace_key: "stacktrace"
+      # 日志级别显示样式
+      level: "capitalColor"
+      # 时间格式
+      time: "ISO8601"
+      # 持续时间格式
+      duration: "seconds"
+      # 调用者信息格式
+      caller: "full"
+      # 日志编码格式
+      encoding: "console"
+    rotate:
+      # 单个日志文件的最大尺寸（MB）
+      max_size: 10
+      # 保留的最大备份数量
+      max_backups: 5
+      # 日志文件的最大保存天数
+      max_age: 30
+      # 是否压缩日志文件
+      compress: false
+      # 日志级别
+    level: 0
+
+    # 应用ID
+  app_id: "a2vRWpBRr0h1"
+  # 界面语言
+  language: "zh"
+  # URL前缀
+  prefix: "admin"
+  # 后台管理界面主题
+  theme: "sword"
+  store:
+    # 文件存储路径
+    path: "./website/public/uploads"
+    # 文件存储前缀
+    prefix: "uploads"
+    # 后台管理系统标题
+  title: "car"
+  # 后台管理系统Logo
+  logo: "<b>Go</b>Admin"
+  # 后台管理系统迷你Logo
+  mini_logo: "<b>G</b>A"
+  # 登录后重定向的主页URL
+  index: "/"
+  # 登录页面URL
+  login_url: "/login"
+  # 是否启用调试模式
+  debug: true
+  # 运行环境
+  env: "local"
+  # 信息日志文件路径
+  info_log: "./website/logs/info.log"
+  # 错误日志文件路径
+  error_log: "./website/logs/error.log"
+  # 访问日志文件路径
+  access_log: "./website/logs/access.log"
+  # 会话生命周期（秒）
+  session_life_time: 7200
+  file_upload_engine:
+    # 文件上传引擎
+    name: "local"
+    # 登录页面标题
+  login_title: "Admin"
+  # 认证用户表名
+  auth_user_table: "goadmin_users"
+  # Bootstrap文件路径
+  bootstrap_file_path: "./bootstrap.go"
+  # Go module文件路径
+  go_mod_file_path: "./go.mod"
+  # 静态资源根路径
+  asset_root_path: "./website/public/"
+  url_format:
+    # 信息页面URL格式
+    info: "/info/:__prefix"
+    # 详细信息页面URL格式
+    detail: "/info/:__prefix/detail"
+    # 创建页面URL格式
+    create: "/new/:__prefix"
+    # 删除操作URL格式
+    delete: "/delete/:__prefix"
+    # 导出操作URL格式
+    export: "/export/:__prefix"
+    # 编辑页面URL格式
+    edit: "/edit/:__prefix"
+    # 展示编辑页面URL格式
+    show_edit: "/info/:__prefix/edit"
+    # 展示创建页面URL格式
+    show_create: "/info/:__prefix/new"
+    # 更新操作URL格式
+    update: "/update/:__prefix"
