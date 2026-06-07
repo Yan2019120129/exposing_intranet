@@ -8,3 +8,7 @@ type Test struct {
 	BaseModel
 	Name string `gorm:"type:varchar(50) not null;comment:名称" json:"name"`
 }
+
+func (Test) TableName() string {
+	return "test"
+}

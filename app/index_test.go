@@ -5,47 +5,29 @@ import (
 	"encoding/json"
 	"my-base/app/models"
 	appRouter "my-base/app/router"
-	"my-base/configs"
-	"my-base/tables"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"strings"
 	"testing"
 
-	_ "github.com/GoAdminGroup/go-admin/adapter/gin"
-	"github.com/GoAdminGroup/go-admin/engine"
-	_ "github.com/GoAdminGroup/themes/sword"
 	"github.com/gin-gonic/gin"
+	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
-func TestFrontendBackendCRUDFlow(t *testing.T) {
-	gin.SetMode(gin.TestMode)
+func TestTestRoutesDoNotPolluteData(t *testing.T) {
+	router, db := newIsolatedTestRouter(t)
 
-	router := gin.New()
-	router.LoadHTMLGlob("../html/*")
-
-	eng := engine.Default()
-	if err := eng.AddConfig(configs.GetAdmin()).
-		AddGenerators(tables.Generators).
-		Use(router); err != nil {
-		t.Fatalf("initialize go-admin engine: %v", err)
+	ping := requestJSON[apiResponse[string]](t, router, http.MethodGet, "/test", "", http.StatusOK)
+	if ping.Data != "测试" {
+		t.Fatalf("unexpected ping data: %q", ping.Data)
 	}
-	defer eng.DefaultConnection().Close()
 
-	gormDB, err := eng.DefaultConnection().GetGorm("default")
-	if err != nil {
-		t.Skipf("database is not configured: %v", err)
-	}
-	router.Use(func(c *gin.Context) {
-		c.Set("db", gormDB)
-	})
-	appRouter.InitRouter(router)
-
-	pageRecorder := performRequest(router, http.MethodGet, "/api/adm/test-page", "")
+	pageRecorder := performRequest(router, http.MethodGet, "/test-page", "")
 	if pageRecorder.Code != http.StatusOK {
-		t.Fatalf("expected frontend status %d, got %d", http.StatusOK, pageRecorder.Code)
+		t.Fatalf("expected test page status %d, got %d", http.StatusOK, pageRecorder.Code)
 	}
 	page := pageRecorder.Body.String()
 	for _, expected := range []string{"Test CRUD", "test-form", "fetch('/tests'"} {
@@ -54,68 +36,92 @@ func TestFrontendBackendCRUDFlow(t *testing.T) {
 		}
 	}
 
-	prepareTestDatabase(t, gormDB)
-
-	created := requestJSON[testResponse](t, router, http.MethodPost, "/api/adm/tests", `{"name":"before"}`, http.StatusOK)
-	if created.Data.Id == 0 || created.Data.Name != "before" {
-		t.Fatalf("unexpected created test: %+v", created.Data)
+	initial := requestJSON[apiResponse[[]testDTO]](t, router, http.MethodGet, "/tests", "", http.StatusOK)
+	if len(initial.Data) != 0 {
+		t.Fatalf("expected isolated database to start empty, got %+v", initial.Data)
 	}
 
-	got := requestJSON[testResponse](t, router, http.MethodGet, "/api/adm/tests/"+itoa(created.Data.Id), "", http.StatusOK)
-	if got.Data.Name != "before" {
-		t.Fatalf("expected detail name %q, got %q", "before", got.Data.Name)
+	createdA := requestJSON[apiResponse[testDTO]](t, router, http.MethodPost, "/tests", `{"name":" alpha ","id":999,"createdAt":"2000-01-01T00:00:00Z"}`, http.StatusOK)
+	if createdA.Data.Id == 0 || createdA.Data.Id == 999 || createdA.Data.Name != "alpha" {
+		t.Fatalf("unexpected first create response: %+v", createdA.Data)
 	}
 
-	updated := requestJSON[testResponse](t, router, http.MethodPut, "/api/adm/tests/"+itoa(created.Data.Id), `{"name":"after"}`, http.StatusOK)
-	if updated.Data.Id != created.Data.Id || updated.Data.Name != "after" {
-		t.Fatalf("unexpected updated test: %+v", updated.Data)
+	createdB := requestJSON[apiResponse[testDTO]](t, router, http.MethodPost, "/tests", `{"name":"beta"}`, http.StatusOK)
+	if createdB.Data.Id == 0 || createdB.Data.Id == createdA.Data.Id || createdB.Data.Name != "beta" {
+		t.Fatalf("unexpected second create response: %+v", createdB.Data)
 	}
 
-	list := requestJSON[testListResponse](t, router, http.MethodGet, "/api/adm/tests", "", http.StatusOK)
-	if len(list.Data) != 1 || list.Data[0].Name != "after" {
-		t.Fatalf("unexpected list response: %+v", list.Data)
+	list := requestJSON[apiResponse[[]testDTO]](t, router, http.MethodGet, "/tests", "", http.StatusOK)
+	if len(list.Data) != 2 || list.Data[0].Name != "alpha" || list.Data[1].Name != "beta" {
+		t.Fatalf("unexpected list after creates: %+v", list.Data)
 	}
 
-	deleteRecorder := performRequest(router, http.MethodDelete, "/api/adm/tests/"+itoa(created.Data.Id), "")
+	updatedA := requestJSON[apiResponse[testDTO]](t, router, http.MethodPut, "/tests/"+itoa(createdA.Data.Id), `{"name":"alpha-updated","id":`+itoa(createdB.Data.Id)+`}`, http.StatusOK)
+	if updatedA.Data.Id != createdA.Data.Id || updatedA.Data.Name != "alpha-updated" {
+		t.Fatalf("unexpected update response: %+v", updatedA.Data)
+	}
+
+	gotB := requestJSON[apiResponse[testDTO]](t, router, http.MethodGet, "/tests/"+itoa(createdB.Data.Id), "", http.StatusOK)
+	if gotB.Data.Id != createdB.Data.Id || gotB.Data.Name != "beta" {
+		t.Fatalf("update polluted second record: %+v", gotB.Data)
+	}
+
+	deleteRecorder := performRequest(router, http.MethodDelete, "/tests/"+itoa(createdA.Data.Id), "")
 	if deleteRecorder.Code != http.StatusOK {
-		t.Fatalf("expected delete status %d, got %d", http.StatusOK, deleteRecorder.Code)
+		t.Fatalf("expected delete status %d, got %d with body %q", http.StatusOK, deleteRecorder.Code, deleteRecorder.Body.String())
 	}
 
-	emptyList := requestJSON[testListResponse](t, router, http.MethodGet, "/api/adm/tests", "", http.StatusOK)
-	if len(emptyList.Data) != 0 {
-		t.Fatalf("expected empty list after delete, got %+v", emptyList.Data)
+	remaining := requestJSON[apiResponse[[]testDTO]](t, router, http.MethodGet, "/tests", "", http.StatusOK)
+	if len(remaining.Data) != 1 || remaining.Data[0].Id != createdB.Data.Id || remaining.Data[0].Name != "beta" {
+		t.Fatalf("delete polluted remaining records: %+v", remaining.Data)
+	}
+
+	var count int64
+	if err := db.Model(&models.Test{}).Count(&count).Error; err != nil {
+		t.Fatalf("count records: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected database to contain exactly one record, got %d", count)
 	}
 }
 
-type testResponse struct {
-	Data testDTO `json:"data"`
+func newIsolatedTestRouter(t *testing.T) (*gin.Engine, *gorm.DB) {
+	t.Helper()
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.LoadHTMLGlob("../html/*")
+
+	db, err := gorm.Open(sqlite.Open("file:"+url.QueryEscape(t.Name())+"?mode=memory&cache=shared"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open isolated sqlite database: %v", err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("get isolated sqlite database handle: %v", err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+
+	if err := db.AutoMigrate(&models.Test{}); err != nil {
+		t.Fatalf("migrate isolated test table: %v", err)
+	}
+
+	router.Use(func(c *gin.Context) {
+		c.Set("db", db)
+	})
+	appRouter.InitRouter(router)
+	return router, db
 }
 
-type testListResponse struct {
-	Data []testDTO `json:"data"`
+type apiResponse[T any] struct {
+	Code int    `json:"code"`
+	Msg  string `json:"msg"`
+	Data T      `json:"data"`
 }
 
 type testDTO struct {
 	Id   int    `json:"id"`
 	Name string `json:"name"`
-}
-
-func prepareTestDatabase(t *testing.T, db *gorm.DB) {
-	t.Helper()
-
-	sqlDB, err := db.DB()
-	if err != nil {
-		t.Skip("database is not available")
-	}
-	if err := sqlDB.Ping(); err != nil {
-		t.Skip("database is not available")
-	}
-	if err := db.AutoMigrate(&models.Test{}); err != nil {
-		t.Fatalf("auto migrate test table: %v", err)
-	}
-	if err := db.Session(&gorm.Session{AllowGlobalUpdate: true}).Where("1 = 1").Delete(&models.Test{}).Error; err != nil {
-		t.Fatalf("clean test table: %v", err)
-	}
 }
 
 func requestJSON[T any](t *testing.T, router *gin.Engine, method, path, body string, status int) T {

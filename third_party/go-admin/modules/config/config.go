@@ -90,6 +90,12 @@ func (d Database) ParamStr() string {
 			if _, ok := d.Params["charset"]; !ok {
 				d.Params["charset"] = "utf8mb4"
 			}
+			if _, ok := d.Params["parseTime"]; !ok {
+				d.Params["parseTime"] = "true"
+			}
+			if _, ok := d.Params["loc"]; !ok {
+				d.Params["loc"] = "Local"
+			}
 		}
 		if len(d.Params) > 0 {
 			p = "?"
