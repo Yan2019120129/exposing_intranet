@@ -11,6 +11,7 @@ import (
 
 	"github.com/GoAdminGroup/go-admin/modules/config"
 	"github.com/GoAdminGroup/go-admin/modules/service"
+	"gorm.io/gorm"
 )
 
 const (
@@ -69,6 +70,8 @@ type Connection interface {
 	GetDelimiters() []string
 
 	GetDB(key string) *sql.DB
+
+	GetGorm(key string) (*gorm.DB, error)
 
 	GetConfig(name string) config.Database
 

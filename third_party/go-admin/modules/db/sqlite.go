@@ -80,8 +80,8 @@ func (db *Sqlite) ExecWith(tx *sql.Tx, conn, query string, args ...interface{}) 
 
 // InitDB implements the method Connection.InitDB.
 func (db *Sqlite) InitDB(cfgList map[string]config.Database) Connection {
-	db.Configs = cfgList
 	db.Once.Do(func() {
+		db.Configs = cfgList
 		for conn, cfg := range cfgList {
 			sqlDB, err := sql.Open("sqlite3", cfg.GetDSN())
 
@@ -95,6 +95,7 @@ func (db *Sqlite) InitDB(cfgList map[string]config.Database) Connection {
 			sqlDB.SetConnMaxIdleTime(cfg.ConnMaxIdleTime)
 
 			db.DbList[conn] = sqlDB
+			db.initGorm(conn, cfg, sqlDB)
 
 			if err := sqlDB.Ping(); err != nil {
 				panic(err)

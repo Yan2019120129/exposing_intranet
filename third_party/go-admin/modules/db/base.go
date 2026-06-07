@@ -6,14 +6,15 @@ import (
 	"sync"
 
 	"github.com/GoAdminGroup/go-admin/modules/config"
-	"xorm.io/xorm"
+	"gorm.io/gorm"
 )
 
 // Base is a common Connection.
 type Base struct {
-	DbList  map[string]*sql.DB
-	Once    sync.Once
-	Configs config.DatabaseList
+	DbList   map[string]*sql.DB
+	GormList map[string]*gorm.DB
+	Once     sync.Once
+	Configs  config.DatabaseList
 }
 
 // Close implements the method Connection.Close.
@@ -30,23 +31,42 @@ func (db *Base) GetDB(key string) *sql.DB {
 	return db.DbList[key]
 }
 
+func (db *Base) GetGorm(key string) (*gorm.DB, error) {
+	if key == "" {
+		key = "default"
+	}
+
+	if gormDB, ok := db.GormList[key]; ok && gormDB != nil {
+		return gormDB, nil
+	}
+	return nil, errors.New("wrong connection name")
+}
+
+func (db *Base) initGorm(conn string, cfg config.Database, sqlDB *sql.DB) {
+	if db.GormList == nil {
+		db.GormList = make(map[string]*gorm.DB)
+	}
+
+	gormDB, err := OpenGormWithSQLDB(cfg, sqlDB)
+	if err != nil {
+		if sqlDB != nil {
+			_ = sqlDB.Close()
+		}
+		panic(err)
+	}
+	db.GormList[conn] = gormDB
+}
+
 func (db *Base) CreateDB(name string, beans ...interface{}) error {
 	cfg := db.GetConfig(name)
 	if cfg.Driver == "" {
 		return errors.New("wrong connection name")
 	}
-	engine, err := xorm.NewEngine(cfg.Driver, cfg.GetDSN())
+	gormDB, err := db.GetGorm(name)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		_ = engine.Close()
-	}()
-	err = engine.Sync(beans...)
-	if err != nil {
-		return err
-	}
-	return nil
+	return gormDB.AutoMigrate(beans...)
 }
 
 func (db *Base) GetConfig(name string) config.Database {

@@ -1,8 +1,7 @@
 package models
 
 func init() {
-	ModelManage.
-		SetModel("test", &Test{}, "示例")
+	ModelManage.SetModel("test", &Test{}, "示例")
 }
 
 type Test struct {

@@ -78,7 +78,7 @@ admin:
     # 文件存储前缀
     prefix: "uploads"
     # 后台管理系统标题
-  title: "car"
+  title: "base"
   # 后台管理系统Logo
   logo: "<b>Go</b>Admin"
   # 后台管理系统迷你Logo

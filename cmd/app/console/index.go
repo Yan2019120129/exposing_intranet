@@ -2,8 +2,11 @@ package console
 
 import (
 	"my-base/app/models"
+	"my-base/configs"
 
+	"github.com/GoAdminGroup/go-admin/engine"
 	"github.com/spf13/cobra"
+	"gorm.io/gorm"
 )
 
 var (
@@ -12,7 +15,9 @@ var (
 		Short: "create table",
 		Long:  "create table to database,",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return models.ModelManage.Create(args...)
+			return withEngineGorm(func(db *gorm.DB) error {
+				return models.ModelManage.Create(db, args...)
+			})
 		},
 	}
 
@@ -21,7 +26,9 @@ var (
 		Short: "delete table",
 		Long:  "delete table to database,",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return models.ModelManage.Delete(args...)
+			return withEngineGorm(func(db *gorm.DB) error {
+				return models.ModelManage.Delete(db, args...)
+			})
 		},
 	}
 
@@ -30,7 +37,19 @@ var (
 		Short: "reset table",
 		Long:  "reset table to database,",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return models.ModelManage.Reset(args...)
+			return withEngineGorm(func(db *gorm.DB) error {
+				return models.ModelManage.Reset(db, args...)
+			})
 		},
 	}
 )
+
+func withEngineGorm(fn func(*gorm.DB) error) error {
+	eng := engine.Default().AddConfig(configs.GetAdmin())
+	defer eng.DefaultConnection().Close()
+	db, err := eng.DefaultConnection().GetGorm("default")
+	if err != nil {
+		return err
+	}
+	return fn(db)
+}

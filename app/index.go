@@ -3,11 +3,10 @@ package app
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"my-base/app/router"
+	"my-base/app/tasks"
 	"my-base/configs"
-	orm "my-base/module/gorm"
 	"my-base/pages"
 	"my-base/tables"
 	"net/http"
@@ -40,10 +39,13 @@ func StartServer() {
 		Use(r); err != nil {
 		panic(err)
 	}
+	gormDB, err := eng.DefaultConnection().GetGorm("default")
+	if err != nil {
+		panic(err)
+	}
 
 	r.Use(func(c *gin.Context) {
-		db := orm.DB
-		c.Set("db", db)
+		c.Set("db", gormDB)
 	})
 
 	r.Static(cfg.Admin.AssetRootPath, cfg.Admin.Store.Path)
@@ -52,13 +54,16 @@ func StartServer() {
 
 	eng.HTML("GET", cfg.Admin.Prefix(), pages.GetDashBoard)
 
+	taskCtx, stopTasks := context.WithCancel(context.Background())
+	taskRunner := tasks.Start(taskCtx, gormDB)
+
 	srv := &http.Server{
 		Addr:    ":" + cfg.Port,
 		Handler: r,
 	}
 
 	go func() {
-		fmt.Println("--------- http://localhost" + srv.Addr + cfg.Admin.Prefix() + " ---------")
+		logger.Info("|********** http://localhost" + srv.Addr + cfg.Admin.Prefix() + "**********|")
 		if err := srv.ListenAndServe(); err != nil && errors.Is(err, http.ErrServerClosed) {
 			logger.Info("listen:", err)
 		}
@@ -69,6 +74,8 @@ func StartServer() {
 	<-quit
 
 	logger.Info("Shutting down server...")
+	stopTasks()
+	taskRunner.Wait()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -76,7 +83,7 @@ func StartServer() {
 		logger.Fatal("Server forced to shutdown:", err)
 	}
 	logger.Info("closing database connection")
-	eng.MysqlConnection().Close()
+	eng.DefaultConnection().Close()
 
 	logger.Info("Server exiting")
 }

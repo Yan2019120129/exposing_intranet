@@ -121,8 +121,8 @@ func (db *Mssql) handleSqlBeforeExec(query string) string {
 	return db.parseSql(str)
 }
 
-//将MYSQL的SQL语法转换为MSSQL的语法
-//1.由于mssql不支持limit写法所以需要对mysql中的limit用法做转换
+// 将MYSQL的SQL语法转换为MSSQL的语法
+// 1.由于mssql不支持limit写法所以需要对mysql中的limit用法做转换
 func (db *Mssql) parseSql(sql string) string {
 	//下面的正则表达式匹配出SELECT和INSERT的关键字后分别做不同的处理，如有LIMIT则将LIMIT的关键字也匹配出
 	patten := `^\s*(?i)(SELECT)|(LIMIT\s*(\d+)\s*,\s*(\d+))`
@@ -250,8 +250,8 @@ func (db *Mssql) ExecWith(tx *sql.Tx, conn, query string, args ...interface{}) (
 
 // InitDB implements the method Connection.InitDB.
 func (db *Mssql) InitDB(cfgs map[string]config.Database) Connection {
-	db.Configs = cfgs
 	db.Once.Do(func() {
+		db.Configs = cfgs
 		for conn, cfg := range cfgs {
 
 			sqlDB, err := sql.Open("sqlserver", cfg.GetDSN())
@@ -271,6 +271,7 @@ func (db *Mssql) InitDB(cfgs map[string]config.Database) Connection {
 			sqlDB.SetConnMaxIdleTime(cfg.ConnMaxIdleTime)
 
 			db.DbList[conn] = sqlDB
+			db.initGorm(conn, cfg, sqlDB)
 
 			if err := sqlDB.Ping(); err != nil {
 				panic(err)

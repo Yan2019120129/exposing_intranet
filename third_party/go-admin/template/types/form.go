@@ -23,6 +23,7 @@ import (
 	"github.com/GoAdminGroup/go-admin/plugins/admin/modules"
 	"github.com/GoAdminGroup/go-admin/plugins/admin/modules/form"
 	form2 "github.com/GoAdminGroup/go-admin/template/types/form"
+	"gorm.io/gorm"
 )
 
 type FieldOption struct {
@@ -1755,7 +1756,7 @@ func (f *FormPanel) GetNewFormFields(sql ...func() *db.SQL) (FormFields, []FormF
 type (
 	FormPreProcessFn  func(values form.Values) form.Values
 	FormPostFn        func(values form.Values) error
-	FormPostFnWithDB  func(db *db.SQL, values form.Values) error
+	FormPostFnWithDB  func(db *gorm.DB, values form.Values) error
 	FormFields        []FormField
 	GroupFormFields   []FormFields
 	GroupFieldHeaders []string

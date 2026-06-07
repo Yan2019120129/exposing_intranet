@@ -21,6 +21,7 @@ import (
 	"github.com/GoAdminGroup/go-admin/plugins/admin/modules/parameter"
 	"github.com/GoAdminGroup/go-admin/template/types/form"
 	"github.com/GoAdminGroup/go-admin/template/types/table"
+	"gorm.io/gorm"
 )
 
 // FieldModel is the single query result.
@@ -531,7 +532,7 @@ func (t TabHeaders) Add(header string) TabHeaders {
 type GetDataFn func(param parameter.Parameters) ([]map[string]interface{}, int)
 
 type DeleteFn func(ids []string) error
-type DeleteFnWithDB func(db *db.SQL, ids []string) error
+type DeleteFnWithDB func(db *gorm.DB, ids []string) error
 type DeleteFnWithRes func(ids []string, res error) error
 
 type Sort uint8

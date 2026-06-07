@@ -2,15 +2,13 @@ package tables
 
 import (
 	"errors"
-	"my-base/utils"
-	"time"
 
 	"github.com/GoAdminGroup/go-admin/context"
 	"github.com/GoAdminGroup/go-admin/modules/db"
-	"github.com/GoAdminGroup/go-admin/modules/db/dialect"
 	form1 "github.com/GoAdminGroup/go-admin/plugins/admin/modules/form"
 	"github.com/GoAdminGroup/go-admin/plugins/admin/modules/table"
 	"github.com/GoAdminGroup/go-admin/template/types/form"
+	"gorm.io/gorm"
 )
 
 func GetTestTable(ctx *context.Context) table.Table {
@@ -24,45 +22,45 @@ func GetTestTable(ctx *context.Context) table.Table {
 	info.AddField("Created_at", "created_at", db.Datetime)
 	info.AddField("Updated_at", "updated_at", db.Datetime)
 	info.SetTable("test").SetTitle("Test").SetDescription("Test").
-		SetDeleteFnWithDB(func(sql *db.SQL, ids []string) error {
-			return deleteTestByDB(sql, ids)
+		SetDeleteFnWithDB(func(gormDB *gorm.DB, ids []string) error {
+			return deleteTestByDB(gormDB, ids)
 		})
 
 	formList := test.GetForm()
 	formList.AddField("Id", "id", db.Bigint, form.Default)
 	formList.AddField("Name", "name", db.Varchar, form.Text)
 	formList.SetTable("test").SetTitle("Test").SetDescription("Test")
-	formList.SetInsertFnWithDB(func(sql *db.SQL, values form1.Values) error {
-		return insertTestByDB(sql, values)
+	formList.SetInsertFnWithDB(func(gormDB *gorm.DB, values form1.Values) error {
+		return insertTestByDB(gormDB, values)
 	})
-	formList.SetUpdateFnWithDB(func(sql *db.SQL, values form1.Values) error {
-		return updateTestByDB(sql, values)
+	formList.SetUpdateFnWithDB(func(gormDB *gorm.DB, values form1.Values) error {
+		return updateTestByDB(gormDB, values)
 	})
 
 	return test
 }
 
-func insertTestByDB(sql *db.SQL, values form1.Values) error {
-	_, err := sql.Table("test").Insert(dialect.H{
-		"name":       values.Get("name"),
-		"created_at": time.Now(),
-		"updated_at": time.Now(),
-	})
-	return err
+func insertTestByDB(gormDB *gorm.DB, values form1.Values) error {
+	return gormDB.Table("test").Create(map[string]interface{}{
+		"name": values.Get("name"),
+	}).Error
 }
 
-func updateTestByDB(sql *db.SQL, values form1.Values) error {
-	_, err := sql.Table("test").Where("id", "=", values.GetIntDefault("id", 0)).Update(dialect.H{
-		"name":       values.Get("name"),
-		"updated_at": time.Now(),
-	})
-	return err
+func updateTestByDB(gormDB *gorm.DB, values form1.Values) error {
+	id := values.GetIntDefault("id", 0)
+	if id <= 0 {
+		return errors.New("invalid id")
+	}
+
+	return gormDB.Table("test").Where("id = ?", id).Updates(map[string]interface{}{
+		"name": values.Get("name"),
+	}).Error
 }
 
-func deleteTestByDB(sql *db.SQL, ids []string) error {
+func deleteTestByDB(gormDB *gorm.DB, ids []string) error {
 	if len(ids) == 0 {
 		return errors.New("invalid id")
 	}
 
-	return sql.Table("test").WhereIn("id", utils.SliceToAny(ids)).Delete()
+	return gormDB.Table("test").Where("id IN ?", ids).Delete(map[string]interface{}{}).Error
 }

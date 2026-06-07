@@ -1,12 +1,12 @@
 package models
 
 import (
-	orm "my-base/module/gorm"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 var (
-	db          = orm.DB
 	ModelManage = &Manage{
 		table: make(map[string]*modelInfo),
 	}
@@ -40,7 +40,7 @@ func (m *Manage) SetModel(name string, model any, comment string) *Manage {
 }
 
 // Create 创建表
-func (m *Manage) Create(names ...string) error {
+func (m *Manage) Create(db *gorm.DB, names ...string) error {
 	tables := make([]*modelInfo, 0)
 	for _, name := range names {
 		if p, ok := m.table[name]; ok {
@@ -63,7 +63,7 @@ func (m *Manage) Create(names ...string) error {
 }
 
 // Delete 删除表
-func (m *Manage) Delete(names ...string) error {
+func (m *Manage) Delete(db *gorm.DB, names ...string) error {
 	var tables []any
 	for _, name := range names {
 		if p, ok := m.table[name]; ok {
@@ -86,12 +86,12 @@ func (m *Manage) Delete(names ...string) error {
 }
 
 // Reset 重置表
-func (m *Manage) Reset(names ...string) error {
-	err := m.Delete(names...)
+func (m *Manage) Reset(db *gorm.DB, names ...string) error {
+	err := m.Delete(db, names...)
 	if err != nil {
 		return err
 	}
-	err = m.Create(names...)
+	err = m.Create(db, names...)
 	if err != nil {
 		return err
 	}

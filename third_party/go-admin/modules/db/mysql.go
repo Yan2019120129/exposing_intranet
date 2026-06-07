@@ -51,8 +51,8 @@ func (db *Mysql) GetDelimiters() []string {
 
 // InitDB implements the method Connection.InitDB.
 func (db *Mysql) InitDB(cfgs map[string]config.Database) Connection {
-	db.Configs = cfgs
 	db.Once.Do(func() {
+		db.Configs = cfgs
 		for conn, cfg := range cfgs {
 
 			sqlDB, err := sql.Open("mysql", cfg.GetDSN())
@@ -71,6 +71,7 @@ func (db *Mysql) InitDB(cfgs map[string]config.Database) Connection {
 			sqlDB.SetConnMaxIdleTime(cfg.ConnMaxIdleTime)
 
 			db.DbList[conn] = sqlDB
+			db.initGorm(conn, cfg, sqlDB)
 
 			if err := sqlDB.Ping(); err != nil {
 				panic(err)

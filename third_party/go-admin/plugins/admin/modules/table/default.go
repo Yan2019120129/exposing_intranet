@@ -25,6 +25,7 @@ import (
 	"github.com/GoAdminGroup/go-admin/plugins/admin/modules/paginator"
 	"github.com/GoAdminGroup/go-admin/plugins/admin/modules/parameter"
 	"github.com/GoAdminGroup/go-admin/template/types"
+	"gorm.io/gorm"
 )
 
 // DefaultTable is an implementation of table.Table
@@ -796,7 +797,7 @@ func (tb *DefaultTable) UpdateData(ctx *context.Context, dataList form.Values) e
 
 	if tb.Form.UpdateFnWithDB != nil {
 		dataList.Delete(form.PostTypeKey)
-		err = tb.Form.UpdateFnWithDB(tb.sql(), tb.PreProcessValue(dataList, types.PostTypeUpdate))
+		err = tb.Form.UpdateFnWithDB(tb.gorm(), tb.PreProcessValue(dataList, types.PostTypeUpdate))
 		if err != nil {
 			errMsg = "post error: " + err.Error()
 		}
@@ -877,7 +878,7 @@ func (tb *DefaultTable) InsertData(ctx *context.Context, dataList form.Values) e
 
 	if f.InsertFnWithDB != nil {
 		dataList.Delete(form.PostTypeKey)
-		err = f.InsertFnWithDB(tb.sql(), tb.PreProcessValue(dataList, types.PostTypeCreate))
+		err = f.InsertFnWithDB(tb.gorm(), tb.PreProcessValue(dataList, types.PostTypeCreate))
 		if err != nil {
 			errMsg = "post error: " + err.Error()
 		}
@@ -1057,7 +1058,7 @@ func (tb *DefaultTable) DeleteData(id string) error {
 	}
 
 	if tb.Info.DeleteFnWithDB != nil {
-		err = tb.Info.DeleteFnWithDB(tb.sql(), idArr)
+		err = tb.Info.DeleteFnWithDB(tb.gorm(), idArr)
 		return err
 	}
 
@@ -1145,6 +1146,21 @@ func (tb *DefaultTable) getDataFromDB() bool {
 // sql is a helper function return db sql.
 func (tb *DefaultTable) sql() *db.SQL {
 	return db.WithDriverAndConnection(tb.connection, tb.db())
+}
+
+// gorm is a helper function return gorm db.
+func (tb *DefaultTable) gorm() *gorm.DB {
+	connection := tb.connection
+	if connection == "" {
+		connection = DefaultConnectionName
+	}
+
+	conn := tb.db()
+	gormDB, err := conn.GetGorm(connection)
+	if err != nil {
+		panic(err)
+	}
+	return gormDB
 }
 
 // sqlObjOrNil is a helper function return db sql obj or nil.

@@ -5,16 +5,19 @@ import (
 	"encoding/json"
 	"my-base/app/models"
 	appRouter "my-base/app/router"
-	orm "my-base/module/gorm"
+	"my-base/configs"
+	"my-base/tables"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"strings"
 	"testing"
 
-	"gorm.io/gorm"
-
+	_ "github.com/GoAdminGroup/go-admin/adapter/gin"
+	"github.com/GoAdminGroup/go-admin/engine"
+	_ "github.com/GoAdminGroup/themes/sword"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 func TestFrontendBackendCRUDFlow(t *testing.T) {
@@ -22,6 +25,22 @@ func TestFrontendBackendCRUDFlow(t *testing.T) {
 
 	router := gin.New()
 	router.LoadHTMLGlob("../html/*")
+
+	eng := engine.Default()
+	if err := eng.AddConfig(configs.GetAdmin()).
+		AddGenerators(tables.Generators).
+		Use(router); err != nil {
+		t.Fatalf("initialize go-admin engine: %v", err)
+	}
+	defer eng.DefaultConnection().Close()
+
+	gormDB, err := eng.DefaultConnection().GetGorm("default")
+	if err != nil {
+		t.Skipf("database is not configured: %v", err)
+	}
+	router.Use(func(c *gin.Context) {
+		c.Set("db", gormDB)
+	})
 	appRouter.InitRouter(router)
 
 	pageRecorder := performRequest(router, http.MethodGet, "/api/adm/test-page", "")
@@ -35,7 +54,7 @@ func TestFrontendBackendCRUDFlow(t *testing.T) {
 		}
 	}
 
-	prepareTestDatabase(t)
+	prepareTestDatabase(t, gormDB)
 
 	created := requestJSON[testResponse](t, router, http.MethodPost, "/api/adm/tests", `{"name":"before"}`, http.StatusOK)
 	if created.Data.Id == 0 || created.Data.Name != "before" {
@@ -81,23 +100,20 @@ type testDTO struct {
 	Name string `json:"name"`
 }
 
-func prepareTestDatabase(t *testing.T) {
+func prepareTestDatabase(t *testing.T, db *gorm.DB) {
 	t.Helper()
 
-	if orm.DB == nil {
-		t.Skip("database is not configured")
-	}
-	sqlDB, err := orm.DB.DB()
+	sqlDB, err := db.DB()
 	if err != nil {
 		t.Skip("database is not available")
 	}
 	if err := sqlDB.Ping(); err != nil {
 		t.Skip("database is not available")
 	}
-	if err := orm.DB.AutoMigrate(&models.Test{}); err != nil {
+	if err := db.AutoMigrate(&models.Test{}); err != nil {
 		t.Fatalf("auto migrate test table: %v", err)
 	}
-	if err := orm.DB.Session(&gorm.Session{AllowGlobalUpdate: true}).Where("1 = 1").Delete(&models.Test{}).Error; err != nil {
+	if err := db.Session(&gorm.Session{AllowGlobalUpdate: true}).Where("1 = 1").Delete(&models.Test{}).Error; err != nil {
 		t.Fatalf("clean test table: %v", err)
 	}
 }

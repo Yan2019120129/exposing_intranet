@@ -92,8 +92,8 @@ func filterQuery(query string) string {
 
 // InitDB implements the method Connection.InitDB.
 func (db *Postgresql) InitDB(cfgList map[string]config.Database) Connection {
-	db.Configs = cfgList
 	db.Once.Do(func() {
+		db.Configs = cfgList
 		for conn, cfg := range cfgList {
 			sqlDB, err := sql.Open("postgres", cfg.GetDSN())
 			if err != nil {
@@ -109,6 +109,7 @@ func (db *Postgresql) InitDB(cfgList map[string]config.Database) Connection {
 			sqlDB.SetConnMaxIdleTime(cfg.ConnMaxIdleTime)
 
 			db.DbList[conn] = sqlDB
+			db.initGorm(conn, cfg, sqlDB)
 
 			if err := sqlDB.Ping(); err != nil {
 				panic(err)
