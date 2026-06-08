@@ -12,6 +12,7 @@ import (
 	fileService "my-base/module/file"
 
 	"github.com/GoAdminGroup/go-admin/context"
+	"github.com/GoAdminGroup/go-admin/modules/auth"
 	"github.com/GoAdminGroup/go-admin/modules/db"
 	form1 "github.com/GoAdminGroup/go-admin/plugins/admin/modules/form"
 	"github.com/GoAdminGroup/go-admin/plugins/admin/modules/table"
@@ -56,7 +57,10 @@ func GetSystemFileTable(ctx *context.Context) table.Table {
 			return deleteSystemFilesByDB(gormDB, ids)
 		})
 	info.Where("status", "!=", -1)
-
+	user := auth.Auth(ctx)
+	if !user.IsSuperAdmin() {
+		info.Where("is_public", "=", 1)
+	}
 	formList := config.GetForm()
 	formList.AddField("Id", "id", db.Bigint, form.Default)
 	formList.AddField("上传文件", "storage_path", db.Varchar, form.File).
