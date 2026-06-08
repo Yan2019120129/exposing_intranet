@@ -6,11 +6,8 @@ package redis
 
 import (
 	"errors"
-	"time"
 
 	"github.com/GoAdminGroup/go-admin/modules/config"
-	"github.com/GoAdminGroup/go-admin/modules/language"
-	"github.com/GoAdminGroup/go-admin/modules/logger"
 	redigo "github.com/gomodule/redigo/redis"
 )
 
@@ -38,25 +35,7 @@ func Init(redisCfg config.Redis) {
 		Dial: func() (redigo.Conn, error) {
 			return dial(redisCfg)
 		},
-		TestOnBorrow: func(c redigo.Conn, t time.Time) error {
-			if time.Since(t) < time.Minute {
-				return nil
-			}
-			_, err := c.Do("PING")
-			return err
-		},
 	}
-
-	conn := p.Get()
-	if err := conn.Err(); err != nil {
-		_ = conn.Close()
-		logger.Panicf("%s: %v", language.Get("initialize redis connection"), err)
-	}
-	if _, err := conn.Do("PING"); err != nil {
-		_ = conn.Close()
-		logger.Panicf("%s: %v", language.Get("initialize redis connection"), err)
-	}
-	_ = conn.Close()
 
 	cfg = redisCfg
 	pool = p
