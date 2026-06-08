@@ -75,6 +75,7 @@ func Upload(c UploadFun, form *multipart.Form) error {
 
 			form.Value[k] = append(form.Value[k], pathStr)
 			form.Value[k+"_size"] = append(form.Value[k+"_size"], fmt.Sprintf("%d", fileObj.Size))
+			form.Value[k+"_original_name"] = append(form.Value[k+"_original_name"], fileObj.Filename)
 		}
 	}
 
