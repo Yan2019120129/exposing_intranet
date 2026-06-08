@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/GoAdminGroup/go-admin/modules/config"
+	"github.com/GoAdminGroup/go-admin/modules/redis"
 	"gorm.io/gorm"
 )
 
@@ -22,6 +23,9 @@ func (db *Base) Close() []error {
 	errs := make([]error, 0)
 	for _, d := range db.DbList {
 		errs = append(errs, d.Close())
+	}
+	if err := redis.Close(); err != nil {
+		errs = append(errs, err)
 	}
 	return errs
 }
