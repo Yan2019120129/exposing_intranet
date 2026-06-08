@@ -2,11 +2,13 @@ package tables
 
 import (
 	"errors"
+	"time"
 
 	"github.com/GoAdminGroup/go-admin/context"
 	"github.com/GoAdminGroup/go-admin/modules/db"
 	form1 "github.com/GoAdminGroup/go-admin/plugins/admin/modules/form"
 	"github.com/GoAdminGroup/go-admin/plugins/admin/modules/table"
+	"github.com/GoAdminGroup/go-admin/template/types"
 	"github.com/GoAdminGroup/go-admin/template/types/form"
 	"gorm.io/gorm"
 )
@@ -19,8 +21,22 @@ func GetTestTable(ctx *context.Context) table.Table {
 		FieldFilterable()
 	info.AddField("Name", "name", db.Varchar).
 		FieldFilterable()
-	info.AddField("Created_at", "created_at", db.Datetime)
-	info.AddField("Updated_at", "updated_at", db.Datetime)
+	info.AddField("Created_at", "created_at", db.Datetime).
+		FieldDisplay(func(value types.FieldModel) interface{} {
+			t, err := time.Parse(time.RFC3339Nano, value.Value)
+			if err != nil {
+				return value.Value
+			}
+			return t.Format(time.DateTime)
+		})
+	info.AddField("Updated_at", "updated_at", db.Datetime).
+		FieldDisplay(func(value types.FieldModel) interface{} {
+			t, err := time.Parse(time.RFC3339Nano, value.Value)
+			if err != nil {
+				return value.Value
+			}
+			return t.Format(time.DateTime)
+		})
 	info.SetTable("test").SetTitle("Test").SetDescription("Test").
 		SetDeleteFnWithDB(func(gormDB *gorm.DB, ids []string) error {
 			return deleteTestByDB(gormDB, ids)

@@ -50,8 +50,22 @@ func GetSystemFileTable(ctx *context.Context) table.Table {
 			return template.HTML(`<span class="label label-default">删除</span>`)
 		}
 	})
-	info.AddField("Created_at", "created_at", db.Datetime)
-	info.AddField("Updated_at", "updated_at", db.Datetime)
+	info.AddField("Created_at", "created_at", db.Datetime).
+		FieldDisplay(func(value types.FieldModel) interface{} {
+			t, err := time.Parse(time.RFC3339Nano, value.Value)
+			if err != nil {
+				return value.Value
+			}
+			return t.Format(time.DateTime)
+		})
+	info.AddField("Updated_at", "updated_at", db.Datetime).
+		FieldDisplay(func(value types.FieldModel) interface{} {
+			t, err := time.Parse(time.RFC3339Nano, value.Value)
+			if err != nil {
+				return value.Value
+			}
+			return t.Format(time.DateTime)
+		})
 	info.SetTable("system_files").SetTitle("系统文件").SetDescription("系统文件").
 		SetDeleteFnWithDB(func(gormDB *gorm.DB, ids []string) error {
 			return deleteSystemFilesByDB(gormDB, ids)
