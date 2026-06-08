@@ -20,7 +20,8 @@ type Http struct {
 
 func NewHttp() *Http {
 	return &Http{header: make(http.Header),
-		client: *http.DefaultClient}
+		client: *http.DefaultClient,
+	}
 }
 
 // Set 设置请求头信息
@@ -71,7 +72,9 @@ func (h *Http) ask(method, url string, body io.Reader) ([]byte, error) {
 		return nil, err
 	}
 	h.respHeader = do.Header
-	return h.result(do.Body)
+	v, e := h.result(do.Body)
+	h = NewHttp()
+	return v, e
 }
 
 // Get Get请求
@@ -85,6 +88,11 @@ func (h *Http) Get(path string) ([]byte, error) {
 // Post Post请求
 func (h *Http) Post(url string, s string) ([]byte, error) {
 	return h.PostFormat(url, "application/json", s)
+}
+
+// Post Form-data
+func (h *Http) PostFormData(url string) ([]byte, error) {
+	return h.PostFormat(url, "application/json", "")
 }
 
 // PostFormat Post请求,带格式
@@ -127,6 +135,39 @@ func (h *Http) PostFile(targetURL, filePath string) ([]byte, error) {
 	h.Set("Content-Type", writer.FormDataContentType())
 
 	return h.ask("POST", targetURL, &requestBody)
+}
+
+// Put 发起 PUT 请求，默认 application/json
+func (h *Http) Put(url string, s string) ([]byte, error) {
+	return h.PutFormat(url, "application/json", s)
+}
+
+// PutFormat 发起 PUT 请求，带指定 Content-Type
+func (h *Http) PutFormat(url string, ctxType string, s string) ([]byte, error) {
+	h.Set("Content-Type", ctxType)
+	var params io.Reader
+	if s != "" {
+		params = strings.NewReader(s)
+	}
+	return h.ask("PUT", url, params)
+}
+
+// Delete 发起 DELETE 请求
+func (h *Http) Delete(url string) ([]byte, error) {
+	if h.params != nil {
+		url += "?" + h.params.Encode()
+	}
+	return h.ask("DELETE", url, nil)
+}
+
+// DeleteWithBody 发起带请求体的 DELETE 请求（部分接口需要）
+func (h *Http) DeleteWithBody(url string, s string) ([]byte, error) {
+	var params io.Reader
+	if s != "" {
+		params = strings.NewReader(s)
+	}
+	h.Set("Content-Type", "application/json")
+	return h.ask("DELETE", url, params)
 }
 
 func (h *Http) result(body io.ReadCloser) ([]byte, error) {
