@@ -53,6 +53,55 @@ type Database struct {
 	Params map[string]string `json:"params,omitempty" yaml:"params,omitempty" ini:"params,omitempty"`
 }
 
+// Redis is a type of redis connection config.
+type Redis struct {
+	Enable bool `json:"enable,omitempty" yaml:"enable,omitempty" ini:"enable,omitempty"`
+
+	Network string `json:"network,omitempty" yaml:"network,omitempty" ini:"network,omitempty"`
+	Addr    string `json:"addr,omitempty" yaml:"addr,omitempty" ini:"addr,omitempty"`
+	Host    string `json:"host,omitempty" yaml:"host,omitempty" ini:"host,omitempty"`
+	Port    string `json:"port,omitempty" yaml:"port,omitempty" ini:"port,omitempty"`
+	Dsn     string `json:"dsn,omitempty" yaml:"dsn,omitempty" ini:"dsn,omitempty"`
+
+	Password string `json:"password,omitempty" yaml:"password,omitempty" ini:"password,omitempty"`
+	DB       int    `json:"db,omitempty" yaml:"db,omitempty" ini:"db,omitempty"`
+
+	MaxIdle     int           `json:"max_idle,omitempty" yaml:"max_idle,omitempty" ini:"max_idle,omitempty"`
+	MaxActive   int           `json:"max_active,omitempty" yaml:"max_active,omitempty" ini:"max_active,omitempty"`
+	IdleTimeout time.Duration `json:"idle_timeout,omitempty" yaml:"idle_timeout,omitempty" ini:"idle_timeout,omitempty"`
+	Wait        bool          `json:"wait,omitempty" yaml:"wait,omitempty" ini:"wait,omitempty"`
+
+	ConnectTimeout time.Duration `json:"connect_timeout,omitempty" yaml:"connect_timeout,omitempty" ini:"connect_timeout,omitempty"`
+	ReadTimeout    time.Duration `json:"read_timeout,omitempty" yaml:"read_timeout,omitempty" ini:"read_timeout,omitempty"`
+	WriteTimeout   time.Duration `json:"write_timeout,omitempty" yaml:"write_timeout,omitempty" ini:"write_timeout,omitempty"`
+	TLS            bool          `json:"tls,omitempty" yaml:"tls,omitempty" ini:"tls,omitempty"`
+}
+
+func (r Redis) SetDefault() Redis {
+	r.Network = utils.SetDefault(r.Network, "", "tcp")
+	r.Host = utils.SetDefault(r.Host, "", "127.0.0.1")
+	r.Port = utils.SetDefault(r.Port, "", "6379")
+	if r.Addr == "" {
+		r.Addr = r.Host + ":" + r.Port
+	}
+	if r.MaxIdle == 0 {
+		r.MaxIdle = 3
+	}
+	if r.IdleTimeout == 0 {
+		r.IdleTimeout = 240 * time.Second
+	}
+	if r.ConnectTimeout == 0 {
+		r.ConnectTimeout = 5 * time.Second
+	}
+	if r.ReadTimeout == 0 {
+		r.ReadTimeout = 5 * time.Second
+	}
+	if r.WriteTimeout == 0 {
+		r.WriteTimeout = 5 * time.Second
+	}
+	return r
+}
+
 func (d Database) GetDSN() string {
 	if d.Dsn != "" {
 		return d.Dsn
@@ -263,6 +312,9 @@ type Config struct {
 	// element of Databases is the default connection. See the
 	// file connection.go.
 	Databases DatabaseList `json:"database,omitempty" yaml:"database,omitempty" ini:"database,omitempty"`
+
+	// Redis connection config. Redis is initialized by engine.AddConfig when enabled.
+	Redis Redis `json:"redis,omitempty" yaml:"redis,omitempty" ini:"redis,omitempty"`
 
 	// The application unique ID. Once generated, don't modify.
 	AppID string `json:"app_id,omitempty" yaml:"app_id,omitempty" ini:"app_id,omitempty"`
@@ -926,6 +978,7 @@ func SetDefault(cfg *Config) *Config {
 		cfg.prefix = cfg.UrlPrefix
 	}
 	cfg.URLFormat = cfg.URLFormat.SetDefault()
+	cfg.Redis = cfg.Redis.SetDefault()
 	return cfg
 }
 

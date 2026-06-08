@@ -27,6 +27,7 @@ import (
 	"github.com/GoAdminGroup/go-admin/modules/errors"
 	"github.com/GoAdminGroup/go-admin/modules/logger"
 	"github.com/GoAdminGroup/go-admin/modules/menu"
+	redis2 "github.com/GoAdminGroup/go-admin/modules/redis"
 	"github.com/GoAdminGroup/go-admin/modules/service"
 	"github.com/GoAdminGroup/go-admin/modules/system"
 	"github.com/GoAdminGroup/go-admin/modules/ui"
@@ -138,7 +139,7 @@ func (eng *Engine) announce() *Engine {
 
 // AddConfig set the global config.
 func (eng *Engine) AddConfig(cfg *config.Config) *Engine {
-	return eng.setConfig(cfg).announce().initDatabase()
+	return eng.setConfig(cfg).announce().initDatabase().initRedis()
 }
 
 // setConfig set the config of engine.
@@ -159,19 +160,28 @@ func (eng *Engine) setConfig(cfg *config.Config) *Engine {
 // AddConfigFromJSON set the global config from json file.
 func (eng *Engine) AddConfigFromJSON(path string) *Engine {
 	cfg := config.ReadFromJson(path)
-	return eng.setConfig(&cfg).announce().initDatabase()
+	return eng.setConfig(&cfg).announce().initDatabase().initRedis()
 }
 
 // AddConfigFromYAML set the global config from yaml file.
 func (eng *Engine) AddConfigFromYAML(path string) *Engine {
 	cfg := config.ReadFromYaml(path)
-	return eng.setConfig(&cfg).announce().initDatabase()
+	return eng.setConfig(&cfg).announce().initDatabase().initRedis()
 }
 
 // AddConfigFromINI set the global config from ini file.
 func (eng *Engine) AddConfigFromINI(path string) *Engine {
 	cfg := config.ReadFromINI(path)
-	return eng.setConfig(&cfg).announce().initDatabase()
+	return eng.setConfig(&cfg).announce().initDatabase().initRedis()
+}
+
+func (eng *Engine) initRedis() *Engine {
+	if !eng.config.Redis.Enable {
+		return eng
+	}
+	printInitMsg(language.Get("initialize redis connection"))
+	redis2.Init(eng.config.Redis)
+	return eng
 }
 
 // InitDatabase initialize all database connection.

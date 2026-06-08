@@ -7,6 +7,7 @@ import (
 	"my-base/app/models"
 
 	"github.com/GoAdminGroup/go-admin/modules/logger"
+	"github.com/GoAdminGroup/go-admin/modules/redis"
 	"gorm.io/gorm"
 )
 
@@ -35,6 +36,11 @@ func testTableMonitorJob(db *gorm.DB) Job {
 			if count > warnThreshold {
 				logger.Infof("test table row count is high: count=%d threshold=%d", count, warnThreshold)
 				return nil
+			}
+
+			_, err := redis.Do("SET", "some_key", count)
+			if err != nil {
+				return err
 			}
 
 			logger.Infof("test table monitor ok: count=%d", count)

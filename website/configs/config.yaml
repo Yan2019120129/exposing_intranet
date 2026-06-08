@@ -7,6 +7,28 @@ gorm:
   # 是否关闭单表复数形式
   singular-table: true
 admin:
+  redis:
+    # 是否启用 Redis 初始化
+    enable: true
+    # Redis 地址
+    addr: "127.0.0.1:6379"
+    # Redis 密码，未设置则留空
+    password: ""
+    # Redis 数据库编号
+    db: 0
+    # 最大空闲连接数
+    max_idle: 3
+    # 最大活跃连接数，0 表示不限制
+    max_active: 0
+    # 空闲连接超时时间
+    idle_timeout: "240s"
+    # 连接超时时间
+    connect_timeout: "5s"
+    # 读超时时间
+    read_timeout: "5s"
+    # 写超时时间
+    write_timeout: "5s"
+
   database:
     default:
       # 数据库服务器地址
