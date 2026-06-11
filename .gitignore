@@ -1,0 +1,47 @@
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Go build / test artifacts
+build/
+dist/
+bin/
+*.test
+*.out
+coverage.out
+
+# Runtime logs
+*.log
+logs/
+website/logs/
+
+# Local configuration and secrets
+website/configs/config.yaml
+website/configs/*.local.yaml
+website/configs/*.local.yml
+*.env
+.env
+.env.*
+!.env.example
+
+# Database dumps / local databases
+website/db/*.sql
+*.sqlite
+*.sqlite3
+*.db
+
+# User uploads and generated public assets
+website/public/uploads/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
