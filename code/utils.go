@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"strconv"
 
+	adminDB "github.com/GoAdminGroup/go-admin/modules/db"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
@@ -13,8 +14,10 @@ import (
 )
 
 const (
-	TrafficKey = "X-Request-Id"
-	LoggerKey  = "_go-admin-logger-request"
+	TrafficKey                   = "X-Request-Id"
+	LoggerKey                    = "_go-admin-logger-request"
+	ContextDBKey                 = "db"
+	DefaultGoAdminConnectionName = "default"
 )
 
 func CompareHashAndPassword(e string, p string) (bool, error) {
@@ -69,15 +72,22 @@ func GenerateMsgIDFromContext(c *gin.Context) string {
 
 // GetOrm 获取orm连接
 func GetOrm(c *gin.Context) (*gorm.DB, error) {
-	idb, exist := c.Get("db")
+	con, err := GetGoAdminConnection(c)
+	if err != nil {
+		return nil, err
+	}
+	return con.GetGorm(DefaultGoAdminConnectionName)
+}
+
+// GetGoAdminConnection 获取 GoAdmin 数据库连接。
+func GetGoAdminConnection(c *gin.Context) (adminDB.Connection, error) {
+	idb, exist := c.Get(ContextDBKey)
 	if !exist {
 		return nil, errors.New("db connect not exist")
 	}
-	switch idb.(type) {
-	case *gorm.DB:
-		//新增操作
-		return idb.(*gorm.DB), nil
-	default:
-		return nil, errors.New("db connect not exist")
+	conn, ok := idb.(adminDB.Connection)
+	if !ok {
+		return nil, errors.New("go-admin db connection not exist")
 	}
+	return conn, nil
 }

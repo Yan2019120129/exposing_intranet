@@ -10,11 +10,11 @@ var (
 )
 
 // InitRouter 初始化路由
-func InitRouter(r *gin.Engine) {
+func InitRouter(r *gin.Engine, authMiddlewares ...gin.HandlerFunc) {
 	// 无需认证的路由
 	examplesNoCheckRoleRouter(r)
 	// 需要认证的路由
-	examplesCheckRoleRouter(r)
+	examplesCheckRoleRouter(r, authMiddlewares...)
 }
 
 // 无需认证的路由示例
@@ -27,9 +27,9 @@ func examplesNoCheckRoleRouter(r *gin.Engine) {
 }
 
 // 需要认证的路由示例
-func examplesCheckRoleRouter(r *gin.Engine) {
+func examplesCheckRoleRouter(r *gin.Engine, authMiddlewares ...gin.HandlerFunc) {
 	// 可根据业务需求来设置接口版本
-	v1 := r.Group("")
+	v1 := r.Group("", authMiddlewares...)
 	for _, f := range routerCheckRole {
 		f(v1)
 	}

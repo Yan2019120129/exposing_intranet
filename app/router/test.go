@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	routerNoCheckRole = append(routerNoCheckRole, RegisterTestRouter)
+	routerCheckRole = append(routerCheckRole, RegisterTestRouter)
 }
 
 // RegisterTestRouter initializes test routes.

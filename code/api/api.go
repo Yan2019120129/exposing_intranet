@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"fmt"
+	"my-base/code"
 	"my-base/code/language"
 	"my-base/code/logger"
 	"my-base/code/response"
@@ -77,18 +78,7 @@ func (e *Api) Bind(d interface{}, bindings ...binding.Binding) *Api {
 
 // GetOrm 获取Orm DB
 func (e Api) GetOrm() (*gorm.DB, error) {
-	idb, exist := e.Context.Get("db")
-	if !exist {
-		return nil, errors.New("db connect not exist")
-	}
-	switch idb.(type) {
-	case *gorm.DB:
-		//新增操作
-		return idb.(*gorm.DB), nil
-	default:
-		return nil, errors.New("db connect not exist")
-	}
-
+	return code.GetOrm(e.Context)
 }
 
 // MakeOrm 设置Orm DB

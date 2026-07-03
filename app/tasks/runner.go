@@ -5,8 +5,10 @@ import (
 	"sync"
 	"time"
 
+	"my-base/code"
+
+	adminDB "github.com/GoAdminGroup/go-admin/modules/db"
 	"github.com/GoAdminGroup/go-admin/modules/logger"
-	"gorm.io/gorm"
 )
 
 // Job describes a recurring background task.
@@ -66,11 +68,16 @@ func (r *Runner) run(ctx context.Context, job Job) {
 	}
 }
 
-func Start(ctx context.Context, db *gorm.DB) *Runner {
+func Start(ctx context.Context, conn adminDB.Connection) (*Runner, error) {
+	db, err := conn.GetGorm(code.DefaultGoAdminConnectionName)
+	if err != nil {
+		return nil, err
+	}
+
 	runner := NewRunner(
 		heartbeatJob(),
 		testTableMonitorJob(db),
 	)
 	runner.Start(ctx)
-	return runner
+	return runner, nil
 }

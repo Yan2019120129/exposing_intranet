@@ -7,6 +7,7 @@ import (
 	"my-base/app/router"
 	"my-base/app/tables"
 	"my-base/app/tasks"
+	"my-base/code"
 	"my-base/configs"
 	"my-base/pages"
 	"net/http"
@@ -39,23 +40,23 @@ func StartServer() {
 		Use(r); err != nil {
 		panic(err)
 	}
-	gormDB, err := eng.DefaultConnection().GetGorm("default")
-	if err != nil {
-		panic(err)
-	}
+	conn := eng.DefaultConnection()
 
 	r.Use(func(c *gin.Context) {
-		c.Set("db", gormDB)
+		c.Set(code.ContextDBKey, conn)
 	})
 
 	r.Static(cfg.Admin.AssetRootPath, cfg.Admin.Store.Path)
 
-	router.InitRouter(r)
+	router.InitRouter(r, router.AdminAuthMiddleware)
 
 	eng.HTML("GET", cfg.Admin.Prefix(), pages.GetDashBoard)
 
 	taskCtx, stopTasks := context.WithCancel(context.Background())
-	taskRunner := tasks.Start(taskCtx, gormDB)
+	taskRunner, err := tasks.Start(taskCtx, conn)
+	if err != nil {
+		panic(err)
+	}
 
 	srv := &http.Server{
 		Addr:    ":" + cfg.Port,
