@@ -30,7 +30,7 @@ func StartServer() {
 	gin.DefaultWriter = io.Discard
 
 	r := gin.Default()
-	r.LoadHTMLGlob("html/*")
+	r.LoadHTMLGlob("website/html/*")
 
 	template.AddComp(chartjs.NewChart())
 
