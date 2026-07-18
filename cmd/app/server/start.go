@@ -10,7 +10,7 @@ var (
 	StartCmd = &cobra.Command{
 		Use:   "start",
 		Short: "start server service",
-		Long:  "start car server service",
+		Long:  "start intranet server service",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if isStart {
 			}

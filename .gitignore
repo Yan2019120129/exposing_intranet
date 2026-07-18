@@ -22,6 +22,9 @@ coverage.out
 logs/
 website/logs/
 
+# Debug binaries
+__debug_bin*
+
 # Local configuration and secrets
 website/configs/config.yaml
 website/configs/*.local.yaml
@@ -44,4 +47,3 @@ website/public/uploads/
 tmp/
 temp/
 *.tmp
-

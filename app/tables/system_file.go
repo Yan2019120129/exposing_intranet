@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"my-base/app/models"
-	fileService "my-base/module/file"
+	fileService "my-base/code/file"
 
 	"github.com/GoAdminGroup/go-admin/context"
 	"github.com/GoAdminGroup/go-admin/modules/auth"

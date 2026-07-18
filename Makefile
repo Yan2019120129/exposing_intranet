@@ -38,7 +38,7 @@ prepare:
 			sed -i 's/pwd: ".*"/pwd: "Aa123098.."/' $(BUILD_DIR)/website/configs/config.yaml; \
 			echo "已修改数据库配置: user=car, pwd=Aa123098.."; \
 		fi; \
-		echo "website 目录复制完成"; \
+		 echo "website 目录复制完成"; \
 	fi
 	@echo "配置文件复制完成"
 

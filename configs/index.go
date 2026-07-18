@@ -17,9 +17,95 @@ var (
 
 // Config 服务配置
 type Config struct {
-	Port  string         `yaml:"port"`  // 服务端口
-	Admin *config.Config `yaml:"admin"` // 管理配置信息
-	Gorm  *gorm.Config   `yaml:"gorm"`  // gorm 配置
+	Port       string         `yaml:"port"`       // 服务端口
+	Admin      *config.Config `yaml:"admin"`      // 管理配置信息
+	Gorm       *gorm.Config   `yaml:"gorm"`       // gorm 配置
+	ListenPort string         `yaml:"listenPort"` // 监听端口
+	Connect    *ConnectConfig `yaml:"connect"`    // 连接配置
+}
+
+// ConnectConfig 连接配置
+type ConnectConfig struct {
+	PingInterval     int `yaml:"ping-interval"`     // 心跳发送间隔（秒）
+	PongTimeout      int `yaml:"pong-timeout"`      // pong 响应超时（秒）
+	MaxPingFailures  int `yaml:"max-ping-failures"` // 最大 ping 失败次数
+	ConnectWait      int `yaml:"connect-wait"`      // 连接匹配等待超时（秒）
+	TCPKeepAlive     int `yaml:"tcp-keepalive"`     // TCP Keep-Alive 间隔（秒）
+	ReadWriteTimeout int `yaml:"readwrite-timeout"` // 数据转发读写超时（秒）
+	WaitConnTimeout  int `yaml:"wait-conn-timeout"` // 等待连接超时清理（秒）
+}
+
+const (
+	defaultPingInterval     = 30
+	defaultPongTimeout      = 90
+	defaultMaxPingFailures  = 3
+	defaultConnectWait      = 10
+	defaultTCPKeepAlive     = 30
+	defaultReadWriteTimeout = 300
+	defaultWaitConnTimeout  = 15
+)
+
+// GetConnect returns connection settings with safe defaults when the config
+// file is missing or leaves a value unset.
+func GetConnect() *ConnectConfig {
+	if c == nil || c.Connect == nil {
+		return &ConnectConfig{
+			PingInterval: defaultPingInterval, PongTimeout: defaultPongTimeout,
+			MaxPingFailures: defaultMaxPingFailures, ConnectWait: defaultConnectWait,
+			TCPKeepAlive: defaultTCPKeepAlive, ReadWriteTimeout: defaultReadWriteTimeout,
+			WaitConnTimeout: defaultWaitConnTimeout,
+		}
+	}
+	return c.Connect
+}
+
+func (c *ConnectConfig) GetPingInterval() int {
+	if c.PingInterval <= 0 {
+		return defaultPingInterval
+	}
+	return c.PingInterval
+}
+
+func (c *ConnectConfig) GetPongTimeout() int {
+	if c.PongTimeout <= 0 {
+		return defaultPongTimeout
+	}
+	return c.PongTimeout
+}
+
+func (c *ConnectConfig) GetMaxPingFailures() int {
+	if c.MaxPingFailures <= 0 {
+		return defaultMaxPingFailures
+	}
+	return c.MaxPingFailures
+}
+
+func (c *ConnectConfig) GetConnectWait() int {
+	if c.ConnectWait <= 0 {
+		return defaultConnectWait
+	}
+	return c.ConnectWait
+}
+
+func (c *ConnectConfig) GetTCPKeepAlive() int {
+	if c.TCPKeepAlive <= 0 {
+		return defaultTCPKeepAlive
+	}
+	return c.TCPKeepAlive
+}
+
+func (c *ConnectConfig) GetReadWriteTimeout() int {
+	if c.ReadWriteTimeout <= 0 {
+		return defaultReadWriteTimeout
+	}
+	return c.ReadWriteTimeout
+}
+
+func (c *ConnectConfig) GetWaitConnTimeout() int {
+	if c.WaitConnTimeout <= 0 {
+		return defaultWaitConnTimeout
+	}
+	return c.WaitConnTimeout
 }
 
 // init 初始化服务端配置
@@ -69,11 +155,17 @@ func GetConfig() *Config {
 
 // GetGorm 获取gorm 配置
 func GetGorm() *gorm.Config {
+	if c == nil || c.Gorm == nil {
+		return &gorm.Config{}
+	}
 	return c.Gorm
 }
 
 // GetAdmin 获取admin 配置
 func GetAdmin() *config.Config {
+	if c == nil {
+		return nil
+	}
 	return c.Admin
 }
 

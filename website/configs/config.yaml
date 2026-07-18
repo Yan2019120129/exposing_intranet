@@ -1,5 +1,20 @@
 # 服务监听端口
 port: "1050"
+listenPort: "1060"
+
+# 连接配置
+connect:
+  # 心跳配置
+  ping-interval: 30        # 心跳发送间隔（秒）
+  pong-timeout: 90         # pong 响应超时（秒）
+  max-ping-failures: 3     # 最大 ping 失败次数
+  # 连接等待配置
+  connect-wait: 10         # 连接匹配等待超时（秒）
+  # 数据转发配置
+  tcp-keepalive: 30        # TCP Keep-Alive 间隔（秒）
+  readwrite-timeout: 300   # 数据转发读写超时（秒）
+  wait-conn-timeout: 15    # 等待连接超时清理（秒）
+
 
 gorm:
   # 是否启用全字段查询
@@ -40,7 +55,7 @@ admin:
       # 数据库密码
       pwd: "Aa123098.."
       # 数据库名
-      name: "base"
+      name: "intranet"
       # 数据库驱动类型
       driver: "mysql"
       # 最大空闲连接数

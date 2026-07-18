@@ -8,6 +8,7 @@ import (
 	"my-base/app/tables"
 	"my-base/app/tasks"
 	"my-base/code"
+	"my-base/code/penetrate"
 	"my-base/configs"
 	"my-base/pages"
 	"net/http"
@@ -67,6 +68,24 @@ func StartServer() {
 		logger.Info("|********** http://localhost" + srv.Addr + cfg.Admin.Prefix() + "**********|")
 		if err := srv.ListenAndServe(); err != nil && errors.Is(err, http.ErrServerClosed) {
 			logger.Info("listen:", err)
+		}
+	}()
+
+	var pprofServer *http.Server
+	if pprofAddr := os.Getenv("EXPOSING_INTRANET_PPROF_ADDR"); pprofAddr != "" {
+		pprofServer = &http.Server{Addr: pprofAddr, Handler: http.DefaultServeMux}
+		go func() {
+			if err := pprofServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				logger.Error("pprof listen:", err)
+			}
+		}()
+	}
+
+	server := penetrate.NewServer(":" + cfg.ListenPort)
+	go func() {
+		err := server.Start()
+		if err != nil {
+			logger.Error("new server err:", err)
 		}
 	}()
 

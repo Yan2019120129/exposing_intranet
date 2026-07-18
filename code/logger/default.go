@@ -78,7 +78,7 @@ func logCallerfilePath(loggingFilePath string) string {
 }
 
 func (l *defaultLogger) Log(level Level, v ...interface{}) {
-	l.logf(level, "", v...)
+	l.logf(level, "%s", fmt.Sprint(v...))
 }
 
 func (l *defaultLogger) Logf(level Level, format string, v ...interface{}) {

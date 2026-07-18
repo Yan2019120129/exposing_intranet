@@ -18,6 +18,10 @@ func init() {
 	// 获取配置文件数据
 	cfg := configs.GetGorm()
 	adminCfg := configs.GetAdmin()
+	if adminCfg == nil || adminCfg.Databases == nil {
+		log.Println("gorm: database configuration is unavailable")
+		return
+	}
 	db := adminCfg.Databases.GetDefault()
 	var err error
 	if DB, err = gorm.Open(mysql.Open(fmt.Sprintf("%v:%v@tcp(%v:%v)/%v?charset=utf8mb4&parseTime=True&loc=Local", db.User, db.Pwd, db.Host, db.Port, db.Name)), &gorm.Config{

@@ -4,6 +4,7 @@ import (
 	"my-base/app"
 	"my-base/cmd/app/console"
 	"my-base/cmd/app/server"
+	"my-base/cmd/client"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -25,6 +26,7 @@ func init() {
 	rootCmd.AddCommand(console.CreateCmd)
 	rootCmd.AddCommand(console.DeleteCmd)
 	rootCmd.AddCommand(console.ResetCmd)
+	rootCmd.AddCommand(client.NewCommand())
 }
 
 // Execute 初始化命令

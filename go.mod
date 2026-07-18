@@ -15,8 +15,10 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.1
 	github.com/smartystreets/goconvey v1.8.1
+	github.com/spf13/cast v1.7.0
 	github.com/spf13/cobra v1.6.1
 	golang.org/x/crypto v0.37.0
+	golang.org/x/exp v0.0.0-20240112132812-db7319d0e0e3
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/mysql v1.5.7
 	gorm.io/driver/sqlite v1.6.0
