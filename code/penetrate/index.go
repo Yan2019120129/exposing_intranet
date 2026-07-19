@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"my-base/app/models"
 	"my-base/app/repository"
-	orm "my-base/code/gorm"
 	"my-base/code/message"
 	transport "my-base/code/transport"
 	"my-base/configs"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"github.com/GoAdminGroup/go-admin/modules/logger"
+	"gorm.io/gorm"
 )
 
 var (
@@ -38,6 +38,7 @@ type Server struct {
 	listen net.Listener
 	client map[string]*Client
 	status map[string]ClientStatus
+	db     *gorm.DB
 }
 
 // GetServer 获取服务端
@@ -46,12 +47,13 @@ func GetServer() *Server {
 }
 
 // NewServer 创建服务
-func NewServer(addr string) *Server {
+func NewServer(addr string, db *gorm.DB) *Server {
 	server = &Server{
 		addr:   addr,
 		lock:   sync.RWMutex{},
 		client: make(map[string]*Client),
 		status: make(map[string]ClientStatus),
+		db:     db,
 	}
 	return server
 }
@@ -196,7 +198,7 @@ func (s *Server) Register(param message.Message, conn *transport.Conn) {
 	}
 
 	// 验证 symbol 是否在数据库中存在
-	clientRepository := repository.NewClientRepository(orm.DB)
+	clientRepository := repository.NewClientRepository(s.db)
 	clientInfo, err := clientRepository.FindBySymbol(param.Symbol)
 	if err != nil {
 		param.SetMsg("Invalid symbol. Please authenticate first via HTTP API.")
@@ -418,7 +420,7 @@ func (s *Server) Close() error {
 		if err != nil {
 			return err
 		}
-		clientRepository := repository.NewClientRepository(orm.DB)
+		clientRepository := repository.NewClientRepository(s.db)
 		_ = clientRepository.UpdateStatusBySymbol(client.symbol, models.StatusOn)
 	}
 	return nil

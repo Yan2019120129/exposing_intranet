@@ -144,7 +144,7 @@ func newRealDatabaseTestRouter(t *testing.T) (*gin.Engine, *gorm.DB, func()) {
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	router.LoadHTMLGlob("../html/*")
+	router.LoadHTMLGlob("../website/html/*")
 
 	eng := engine.Default()
 	if err := eng.AddConfig(configs.GetAdmin()).
@@ -153,16 +153,17 @@ func newRealDatabaseTestRouter(t *testing.T) (*gin.Engine, *gorm.DB, func()) {
 		t.Fatalf("initialize go-admin engine: %v", err)
 	}
 
-	db, err := eng.DefaultConnection().GetGorm("default")
+	conn := eng.DefaultConnection()
+	db, err := conn.GetGorm("default")
 	if err != nil {
-		eng.DefaultConnection().Close()
+		conn.Close()
 		t.Fatalf("get engine gorm: %v", err)
 	}
 
 	router.Use(func(c *gin.Context) {
-		c.Set("db", db)
+		c.Set("db", conn)
 	})
 	appRouter.InitRouter(router)
 
-	return router, db, func() { eng.DefaultConnection().Close() }
+	return router, db, func() { conn.Close() }
 }

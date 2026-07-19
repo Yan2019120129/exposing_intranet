@@ -6,7 +6,6 @@ import (
 
 	"my-base/app/models"
 	"my-base/app/repository"
-	orm "my-base/code/gorm"
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
@@ -46,7 +45,7 @@ func NewClientService(db *gorm.DB, runtimes ...ClientRuntime) *ClientService {
 		runtime = runtimes[0]
 	}
 	return &ClientService{
-		DB:         dbOrDefault(db),
+		DB:         db,
 		Repository: repository.NewClientRepository(db),
 		Runtime:    runtime,
 	}
@@ -110,11 +109,4 @@ func (s *ClientService) DeleteByIDs(ids []int) error {
 
 func (s *ClientService) NameOptions() ([]repository.ClientNameOption, error) {
 	return s.Repository.NameOptions()
-}
-
-func dbOrDefault(db *gorm.DB) *gorm.DB {
-	if db != nil {
-		return db
-	}
-	return orm.DB
 }

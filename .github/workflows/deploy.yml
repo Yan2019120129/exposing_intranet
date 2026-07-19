@@ -1,0 +1,472 @@
+name: Go CI/CD
+
+on:
+  # 仅推送 v 开头的 Tag 时执行完整 CI 并发布。
+  push:
+    tags:
+      - "v*"
+
+# 生产 Tag 发布不可被新任务取消，并且所有 Tag 发布串行执行。
+concurrency:
+  group: >-
+    exposing-intranet-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  APP_NAME: exposing-intranet
+  SERVICE_NAME: exposing-intranet
+
+jobs:
+  ci:
+    name: CI
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          # Go 1.25.12 修复 crypto/tls、net/textproto、crypto/x509
+          # 和 html/template 的当前 govulncheck 报告。
+          go-version: '1.25.12'
+          check-latest: true
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Verify Go toolchain
+        shell: bash
+        run: |
+          expected='go1.25.12'
+          actual="$(go env GOVERSION)"
+          if [[ "${actual}" != "${expected}" ]]; then
+            echo "Go 工具链版本错误：${actual}，期望：${expected}"
+            exit 1
+          fi
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Verify dependencies
+        run: go mod verify
+
+      - name: Check gofmt
+        shell: bash
+        run: |
+          mapfile -t go_files < <(find . \
+            -path './.git' -prune -o \
+            -path './third_party' -prune -o \
+            -name '*.go' -type f -print)
+
+          if ((${#go_files[@]} == 0)); then
+            echo '未找到 Go 源文件'
+            exit 0
+          fi
+
+          unformatted="$(gofmt -l "${go_files[@]}")"
+          if [[ -n "${unformatted}" ]]; then
+            echo '以下文件未通过 gofmt：'
+            echo "${unformatted}"
+            exit 1
+          fi
+
+      - name: Go vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test -v ./...
+
+      - name: Race test
+        run: go test -race ./...
+
+      - name: Govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
+
+      # Tag 只在 CI 中编译一次，部署作业只使用这个构建产物。
+      - name: Build Linux amd64 release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          package_name="${APP_NAME}.tar.gz"
+
+          rm -rf dist
+          mkdir -p dist/release/website/configs
+
+          CGO_ENABLED=0 \
+          GOOS=linux \
+          GOARCH=amd64 \
+          go build \
+            -trimpath \
+            -ldflags='-s -w' \
+            -o "dist/release/${APP_NAME}" \
+            .
+
+          # 程序运行时依赖 website/html、配置和静态资源。
+          cp -R website/html dist/release/website/
+          cp website/configs/config.yaml dist/release/website/configs/
+          cp -R website/public/. dist/release/website/public/
+          # 上传文件属于服务器持久化数据，不随版本发布。
+          rm -rf -- dist/release/website/public/uploads
+
+          tar \
+            --sort=name \
+            --mtime='UTC 1970-01-01' \
+            --owner=0 \
+            --group=0 \
+            --numeric-owner \
+            -C dist/release \
+            -czf "dist/${package_name}" \
+            .
+
+          (cd dist && sha256sum "${package_name}" > "${package_name}.sha256")
+          test -s "dist/${package_name}"
+          test -s "dist/${package_name}.sha256"
+
+      - name: Upload release artifact
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ github.sha }}
+          path: |
+            dist/${{ env.APP_NAME }}.tar.gz
+            dist/${{ env.APP_NAME }}.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+  deploy:
+    name: Deploy production
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: ci
+    runs-on: ubuntu-latest
+
+    # 需要在仓库中将 production Environment 配置为必须人工审批。
+    environment:
+      name: production
+
+    steps:
+      - name: Checkout tag
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Verify tag is based on main
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          if [[ ! "${tag}" =~ ^v[0-9A-Za-z][0-9A-Za-z._+-]*$ ]]; then
+            echo "不允许的发布 Tag：${tag}"
+            exit 1
+          fi
+
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "${GITHUB_SHA}" origin/main; then
+            echo "Tag ${tag} 的提交 ${GITHUB_SHA} 不属于 origin/main"
+            exit 1
+          fi
+
+      - name: Download release artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: release-${{ github.sha }}
+          path: dist
+
+      - name: Configure SSH
+        shell: bash
+        env:
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          if [[ -z "${DEPLOY_USER}" || "${DEPLOY_USER}" == root ]]; then
+            echo 'DEPLOY_USER 必须是非 root 用户'
+            exit 1
+          fi
+
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${DEPLOY_SSH_KEY}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "${DEPLOY_KNOWN_HOSTS}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Create remote staging directory
+        id: staging
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: /opt/exposing-intranet
+        run: |
+          release_id="${GITHUB_REF_NAME}-${GITHUB_SHA:0:8}"
+          remote_args="$(printf '%q ' "${DEPLOY_PATH}" "${GITHUB_REF_NAME}" "${release_id}")"
+          staging_path="$(
+            ssh \
+              -i ~/.ssh/deploy_key \
+              -p "${DEPLOY_PORT}" \
+              "${DEPLOY_USER}@${DEPLOY_HOST}" \
+              "bash -s -- ${remote_args}" <<'REMOTE_SCRIPT'
+          set -euo pipefail
+
+          DEPLOY_PATH="$1"
+          TAG="$2"
+          RELEASE_ID="$3"
+
+          if [[ ! "${TAG}" =~ ^v[0-9A-Za-z][0-9A-Za-z._+-]*$ ]]; then
+            echo "不允许的发布 Tag：${TAG}" >&2
+            exit 1
+          fi
+          if [[ ! "${RELEASE_ID}" =~ ^v[0-9A-Za-z][0-9A-Za-z._+-]*-[0-9a-f]{8}$ ]]; then
+            echo "不允许的发布版本标识：${RELEASE_ID}" >&2
+            exit 1
+          fi
+
+          RELEASE_PATH="${DEPLOY_PATH}/releases/${RELEASE_ID}"
+
+          if [[ -e "${RELEASE_PATH}" || -L "${RELEASE_PATH}" ]]; then
+            echo "发布版本已存在，禁止覆盖：${RELEASE_PATH}" >&2
+            exit 1
+          fi
+
+          mkdir -p \
+            "${DEPLOY_PATH}/staging" \
+            "${DEPLOY_PATH}/releases" \
+            "${DEPLOY_PATH}/shared/configs" \
+            "${DEPLOY_PATH}/shared/logs" \
+            "${DEPLOY_PATH}/shared/uploads" \
+            "${DEPLOY_PATH}/shared/data"
+          mktemp -d "${DEPLOY_PATH}/staging/${RELEASE_ID}.XXXXXX"
+          REMOTE_SCRIPT
+          )"
+
+          [[ -n "${staging_path}" ]]
+          echo "path=${staging_path}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload release to staging
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          package_name="${APP_NAME}.tar.gz"
+          checksum_name="${package_name}.sha256"
+
+          scp \
+            -i ~/.ssh/deploy_key \
+            -P "${DEPLOY_PORT}" \
+            "dist/${package_name}" \
+            "dist/${checksum_name}" \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:${{ steps.staging.outputs.path }}/"
+
+      - name: Deploy, verify and rollback on failure
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: /opt/exposing-intranet
+          DEPLOY_HEALTHCHECK_URL: ${{ secrets.DEPLOY_HEALTHCHECK_URL }}
+        run: |
+          release_id="${GITHUB_REF_NAME}-${GITHUB_SHA:0:8}"
+          healthcheck_url="${DEPLOY_HEALTHCHECK_URL:-http://127.0.0.1:1050/admin/login}"
+          remote_args="$(printf '%q ' \
+            "${DEPLOY_PATH}" \
+            "${APP_NAME}" \
+            "${SERVICE_NAME}" \
+            "${GITHUB_REF_NAME}" \
+            "${release_id}" \
+            "${{ steps.staging.outputs.path }}" \
+            "${healthcheck_url}")"
+
+          ssh \
+            -i ~/.ssh/deploy_key \
+            -p "${DEPLOY_PORT}" \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "bash -s -- ${remote_args}" <<'REMOTE_SCRIPT'
+          set -euo pipefail
+
+          DEPLOY_PATH="$1"
+          APP_NAME="$2"
+          SERVICE_NAME="$3"
+          TAG="$4"
+          RELEASE_ID="$5"
+          STAGING_PATH="$6"
+          HEALTHCHECK_URL="$7"
+
+          PACKAGE_NAME="${APP_NAME}.tar.gz"
+          ARCHIVE_PATH="${STAGING_PATH}/${PACKAGE_NAME}"
+          RELEASE_PATH="${DEPLOY_PATH}/releases/${RELEASE_ID}"
+          CURRENT_LINK="${DEPLOY_PATH}/current"
+          SHARED_PATH="${DEPLOY_PATH}/shared"
+          SHARED_CONFIGS="${SHARED_PATH}/configs"
+          SHARED_CONFIG_FILE="${SHARED_CONFIGS}/config.yaml"
+          SHARED_LOGS="${SHARED_PATH}/logs"
+          SHARED_UPLOADS="${SHARED_PATH}/uploads"
+          SHARED_DATA="${SHARED_PATH}/data"
+          TEMP_RELEASE=""
+
+          cleanup() {
+            if [[ -n "${TEMP_RELEASE}" && -d "${TEMP_RELEASE}" ]]; then
+              rm -rf -- "${TEMP_RELEASE}"
+            fi
+            if [[ -d "${STAGING_PATH}" ]]; then
+              rm -rf -- "${STAGING_PATH}"
+            fi
+          }
+          trap cleanup EXIT
+
+          if [[ ! "${TAG}" =~ ^v[0-9A-Za-z][0-9A-Za-z._+-]*$ ]]; then
+            echo "不允许的发布 Tag：${TAG}" >&2
+            exit 1
+          fi
+
+          if [[ ! "${RELEASE_ID}" =~ ^v[0-9A-Za-z][0-9A-Za-z._+-]*-[0-9a-f]{8}$ ]]; then
+            echo "不允许的发布版本标识：${RELEASE_ID}" >&2
+            exit 1
+          fi
+
+          if [[ -e "${RELEASE_PATH}" || -L "${RELEASE_PATH}" ]]; then
+            echo "发布版本已存在，禁止覆盖：${RELEASE_PATH}" >&2
+            exit 1
+          fi
+
+          if [[ ! -f "${ARCHIVE_PATH}" || ! -f "${ARCHIVE_PATH}.sha256" ]]; then
+            echo "staging 中缺少发布包或 SHA256 文件" >&2
+            exit 1
+          fi
+
+          (
+            cd "${STAGING_PATH}"
+            sha256sum -c "${PACKAGE_NAME}.sha256"
+          )
+
+          # 拒绝绝对路径和目录穿越路径，避免解压包越界写入。
+          if tar -tzf "${ARCHIVE_PATH}" | grep -Eq '(^/|(^|/)\.\.(/|$))'; then
+            echo '发布包包含不安全路径'
+            exit 1
+          fi
+
+          if [[ -e "${CURRENT_LINK}" && ! -L "${CURRENT_LINK}" ]]; then
+            echo "current 必须是软链接：${CURRENT_LINK}" >&2
+            exit 1
+          fi
+
+          OLD_CURRENT=""
+          if [[ -L "${CURRENT_LINK}" ]]; then
+            OLD_CURRENT="$(readlink -f -- "${CURRENT_LINK}")"
+            if [[ ! -d "${OLD_CURRENT}" ]]; then
+              echo "current 指向的旧版本不存在：${OLD_CURRENT}" >&2
+              exit 1
+            fi
+          fi
+
+          # 预先验证非 root 部署用户拥有免密码的精确 systemd 权限，避免切换后才失败。
+          # 首次部署没有 current 和可运行旧版本，不能要求服务在发布前已 active。
+          if [[ -n "${OLD_CURRENT}" ]]; then
+            sudo -n /usr/bin/systemctl is-active --quiet "${SERVICE_NAME}"
+          else
+            echo "首次部署：没有 current，跳过旧版本 active 检查"
+          fi
+
+          mkdir -p \
+            "${DEPLOY_PATH}/releases" \
+            "${SHARED_CONFIGS}" \
+            "${SHARED_LOGS}" \
+            "${SHARED_UPLOADS}" \
+            "${SHARED_DATA}"
+          TEMP_RELEASE="$(mktemp -d "${DEPLOY_PATH}/.release-${RELEASE_ID}.XXXXXX")"
+
+          tar -xzf "${ARCHIVE_PATH}" -C "${TEMP_RELEASE}"
+          test -x "${TEMP_RELEASE}/${APP_NAME}"
+          test -d "${TEMP_RELEASE}/website/html"
+          test -d "${TEMP_RELEASE}/website/public"
+
+          # 首次使用 shared 布局时，从发布包初始化生产配置；之后不覆盖。
+          if [[ -e "${SHARED_CONFIG_FILE}" || -L "${SHARED_CONFIG_FILE}" ]]; then
+            if [[ ! -f "${SHARED_CONFIG_FILE}" ]]; then
+              echo "shared 配置不是普通文件：${SHARED_CONFIG_FILE}" >&2
+              exit 1
+            fi
+          else
+            cp -a \
+              "${TEMP_RELEASE}/website/configs/config.yaml" \
+              "${SHARED_CONFIG_FILE}"
+          fi
+
+          # release 内保留程序使用的路径，实际内容统一放到 shared。
+          rm -rf -- "${TEMP_RELEASE}/website/configs"
+          ln -s -- "../../../shared/configs" "${TEMP_RELEASE}/website/configs"
+          rm -rf -- "${TEMP_RELEASE}/website/logs"
+          ln -s -- "../../../shared/logs" "${TEMP_RELEASE}/website/logs"
+          rm -rf -- "${TEMP_RELEASE}/website/public/uploads"
+          ln -s -- "../../../../shared/uploads" "${TEMP_RELEASE}/website/public/uploads"
+
+          chmod 755 "${TEMP_RELEASE}/${APP_NAME}"
+
+          # 同一文件系统内 rename，且目标版本不存在，避免覆盖已有 release。
+          mv -T -- "${TEMP_RELEASE}" "${RELEASE_PATH}"
+          TEMP_RELEASE=""
+
+          switch_current() {
+            local target="$1"
+            local target_rel
+            local link_tmp="${DEPLOY_PATH}/.current-${RELEASE_ID}-$$-${RANDOM}"
+            if [[ "${target}" != "${DEPLOY_PATH}/"* ]]; then
+              echo "发布目标不在部署目录内：${target}" >&2
+              return 1
+            fi
+            target_rel="${target#${DEPLOY_PATH}/}"
+            ln -s -- "${target_rel}" "${link_tmp}"
+            mv -T -- "${link_tmp}" "${CURRENT_LINK}"
+          }
+
+          restart_and_check() {
+            if ! sudo -n /usr/bin/systemctl restart "${SERVICE_NAME}"; then
+              echo "重启服务失败：${SERVICE_NAME}" >&2
+              return 1
+            fi
+
+            # systemd 的 active 只表示进程已启动，等待 HTTP 端口真正就绪。
+            for _ in {1..30}; do
+              if sudo -n /usr/bin/systemctl is-active --quiet "${SERVICE_NAME}" &&
+                /usr/bin/curl \
+                  --fail \
+                  --silent \
+                  --max-time 2 \
+                  "${HEALTHCHECK_URL}" > /dev/null; then
+                return 0
+              fi
+              sleep 1
+            done
+
+            echo "服务启动后健康检查超时：${HEALTHCHECK_URL}" >&2
+            sudo -n /usr/bin/systemctl status "${SERVICE_NAME}" --no-pager -l >&2 || true
+            return 1
+          }
+
+          switch_current "${RELEASE_PATH}"
+
+          if ! restart_and_check; then
+            echo "新版本健康检查失败，开始回滚：${TAG}" >&2
+            if [[ -n "${OLD_CURRENT}" ]]; then
+              switch_current "${OLD_CURRENT}"
+              if restart_and_check; then
+                echo "已回滚到：${OLD_CURRENT}"
+              else
+                echo '自动回滚失败，请立即人工处理' >&2
+                exit 1
+              fi
+            else
+              echo '没有可回滚的旧版本' >&2
+            fi
+            exit 1
+          fi
+
+          echo "部署成功，健康检查通过：${TAG}"
+          REMOTE_SCRIPT

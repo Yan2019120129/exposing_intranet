@@ -37,7 +37,7 @@ func GetPortTable(ctx *context.Context) table.Table {
 	formList := port.GetForm()
 	formList.AddField("Id", "id", db.Bigint, form.Default)
 	formList.AddField("Client_id", "client_id", db.Bigint, form.SelectSingle).
-		FieldOptions(clientNameOptions()).FieldMust()
+		FieldOptionsFromTable("client", "name", "id").FieldMust()
 	formList.AddField("Server", "server", db.Text, form.Text).FieldMust().FieldTrimSpace()
 	formList.AddField("Local", "local", db.Text, form.Text).FieldMust().FieldTrimSpace()
 	formList.AddField("Comment", "comment", db.Text, form.Text).FieldTrimSpace()
@@ -64,16 +64,4 @@ func GetPortTable(ctx *context.Context) table.Table {
 	})
 
 	return port
-}
-
-func clientNameOptions() types.FieldOptions {
-	items, err := service.NewClientService(nil).NameOptions()
-	if err != nil {
-		return nil
-	}
-	options := make(types.FieldOptions, 0, len(items))
-	for _, item := range items {
-		options = append(options, types.FieldOption{Text: item.Name, Value: strconv.Itoa(item.ID)})
-	}
-	return options
 }

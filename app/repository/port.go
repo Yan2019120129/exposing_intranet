@@ -2,7 +2,6 @@ package repository
 
 import (
 	"my-base/app/models"
-	orm "my-base/code/gorm"
 
 	"gorm.io/gorm"
 )
@@ -22,9 +21,6 @@ type PortWithClient struct {
 }
 
 func NewPortRepository(db *gorm.DB) *PortRepository {
-	if db == nil {
-		db = orm.DB
-	}
 	return &PortRepository{DB: db}
 }
 

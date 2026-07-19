@@ -2,7 +2,6 @@ package repository
 
 import (
 	"my-base/app/models"
-	orm "my-base/code/gorm"
 
 	"gorm.io/gorm"
 )
@@ -28,9 +27,6 @@ type ClientNameOption struct {
 }
 
 func NewClientRepository(db *gorm.DB) *ClientRepository {
-	if db == nil {
-		db = orm.DB
-	}
 	return &ClientRepository{DB: db}
 }
 

@@ -42,6 +42,10 @@ func StartServer() {
 		panic(err)
 	}
 	conn := eng.DefaultConnection()
+	db, err := conn.GetGorm(code.DefaultGoAdminConnectionName)
+	if err != nil {
+		panic(err)
+	}
 
 	r.Use(func(c *gin.Context) {
 		c.Set(code.ContextDBKey, conn)
@@ -81,7 +85,7 @@ func StartServer() {
 		}()
 	}
 
-	server := penetrate.NewServer(":" + cfg.ListenPort)
+	server := penetrate.NewServer(":"+cfg.ListenPort, db)
 	go func() {
 		err := server.Start()
 		if err != nil {

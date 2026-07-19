@@ -12,8 +12,10 @@ import (
 	"strings"
 	"testing"
 
+	adminConfig "github.com/GoAdminGroup/go-admin/modules/config"
+	adminDB "github.com/GoAdminGroup/go-admin/modules/db"
+	_ "github.com/GoAdminGroup/go-admin/modules/db/drivers/sqlite"
 	"github.com/gin-gonic/gin"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
@@ -90,24 +92,30 @@ func newIsolatedTestRouter(t *testing.T) (*gin.Engine, *gorm.DB) {
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	router.LoadHTMLGlob("../html/*")
+	router.LoadHTMLGlob("../website/html/*")
 
-	db, err := gorm.Open(sqlite.Open("file:"+url.QueryEscape(t.Name())+"?mode=memory&cache=shared"), &gorm.Config{})
+	dsn := "file:" + url.QueryEscape(t.Name()) + "?mode=memory&cache=shared"
+	conn := adminDB.GetConnectionByDriver(adminDB.DriverSqlite).InitDB(map[string]adminConfig.Database{
+		"default": {
+			Driver:       adminConfig.DriverSqlite,
+			Dsn:          dsn,
+			MaxIdleConns: 1,
+			MaxOpenConns: 1,
+		},
+	})
+	db, err := conn.GetGorm("default")
 	if err != nil {
+		conn.Close()
 		t.Fatalf("open isolated sqlite database: %v", err)
 	}
-	sqlDB, err := db.DB()
-	if err != nil {
-		t.Fatalf("get isolated sqlite database handle: %v", err)
-	}
-	t.Cleanup(func() { _ = sqlDB.Close() })
+	t.Cleanup(func() { conn.Close() })
 
 	if err := db.AutoMigrate(&models.Test{}); err != nil {
 		t.Fatalf("migrate isolated test table: %v", err)
 	}
 
 	router.Use(func(c *gin.Context) {
-		c.Set("db", db)
+		c.Set("db", conn)
 	})
 	appRouter.InitRouter(router)
 	return router, db
