@@ -3,7 +3,6 @@ package utils
 import (
 	"bytes"
 	"io"
-	"log"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -63,7 +62,6 @@ func (h *Http) GetHeader() http.Header {
 func (h *Http) ask(method, url string, body io.Reader) ([]byte, error) {
 	request, err := http.NewRequest(method, url, body)
 	if err != nil {
-		log.Fatal(err)
 		return nil, err
 	}
 	request.Header = h.header

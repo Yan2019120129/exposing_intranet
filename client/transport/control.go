@@ -2,6 +2,7 @@ package transport
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -14,7 +15,10 @@ import (
 	toolsPenetrate "my-base/code/transport"
 )
 
-var ErrClientDeleted = errors.New("client deleted")
+var (
+	ErrClientDeleted              = errors.New("client deleted")
+	ErrClientRegistrationRejected = errors.New("client registration rejected")
+)
 
 type ConnOptions = toolsPenetrate.ConnOptions
 
@@ -106,6 +110,8 @@ func (c *Client) StartWithHeartbeat(interval, pongTimeout time.Duration, maxFail
 				c.OnKey("")
 			}
 			return ErrClientDeleted
+		case msg.EqClose():
+			return fmt.Errorf("%w: %v", ErrClientRegistrationRejected, msg.Msg)
 		default:
 			log.Println(msg.Msg)
 		}

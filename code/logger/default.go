@@ -39,10 +39,13 @@ func (l *defaultLogger) String() string {
 }
 
 func (l *defaultLogger) Fields(fields map[string]interface{}) Logger {
-	l.Lock()
-	l.opts.Fields = copyFields(fields)
-	l.Unlock()
-	return l
+	// Fields must not mutate the shared logger: request-scoped helpers may use
+	// the same base logger concurrently. Return an isolated logger instead.
+	l.RLock()
+	opts := l.opts
+	l.RUnlock()
+	opts.Fields = copyFields(fields)
+	return &defaultLogger{opts: opts}
 }
 
 func copyFields(src map[string]interface{}) map[string]interface{} {

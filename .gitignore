@@ -27,6 +27,7 @@ __debug_bin*
 
 # Local configuration and secrets
 website/configs/config.yaml
+website/configs/client.key
 website/configs/*.local.yaml
 website/configs/*.local.yml
 *.env

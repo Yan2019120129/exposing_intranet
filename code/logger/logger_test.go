@@ -1,7 +1,9 @@
 package logger
 
 import (
+	"bytes"
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -22,4 +24,23 @@ func TestLogger(t *testing.T) {
 	v := ctx.Value(&loggerKey{})
 	ll := v.(*Helper)
 	ll.Info("test_msg")
+}
+
+func TestHelperFieldsDoNotMutateBaseLogger(t *testing.T) {
+	var output bytes.Buffer
+	base := NewLogger(WithLevel(InfoLevel), WithOutput(&output), WithTimeFormat(""))
+	helper := NewHelper(base).WithFields(map[string]interface{}{"requestId": "request-a"})
+	helper.Info("request message")
+	base.Log(InfoLevel, "base message")
+
+	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("got %d log lines, want 2: %q", len(lines), output.String())
+	}
+	if !strings.Contains(lines[0], "request-a") {
+		t.Fatalf("request log missing its fields: %q", lines[0])
+	}
+	if strings.Contains(lines[1], "request-a") {
+		t.Fatalf("base logger inherited request fields: %q", lines[1])
+	}
 }

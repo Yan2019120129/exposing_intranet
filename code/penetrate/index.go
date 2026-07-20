@@ -79,6 +79,12 @@ func (s *Server) Start() error {
 func (s *Server) dealWith(conn net.Conn) {
 	handConn := transport.NewConnWithOptions(conn, s.controlConnOptions())
 	defer handConn.Close()
+	// 兜底：单个连接处理 goroutine 的 panic 不应打挂整个服务端
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Error("dealWith panic:", r)
+		}
+	}()
 	msg := message.Message{}
 	err := handConn.ParseMsg(&msg)
 	if err != nil {
@@ -156,33 +162,26 @@ func (s *Server) ListClientStatus() []ClientStatus {
 // 建立连接
 func (s *Server) connect(msg message.Message, conn *transport.Conn) {
 	logger.Info("server received link request")
-	if s.IsExist(msg.Symbol) {
-		client := s.GetClient(msg.Symbol)
-		if client.IsExist(msg.TargetSymbol) {
-			listen := client.GetListen(msg.TargetSymbol)
-			targetConn := listen.ActivateConn(msg.Name)
-			if targetConn != nil {
-				key := getKey()
-				listen.AddConn(key, conn.SetSymbol(key))
-				_ = CommunicationWithTimeout(targetConn, conn, s.dataTimeout())
-				listen.DelConn(targetConn.GetSymbol(), conn.GetSymbol())
-			} else {
-				logger.Info("target port does not exist")
-			}
-			// waitConnList := listen.GetWaitConnList()
-			// for _, targetConn := range waitConnList {
-			// 	key := getKey()
-			// 	listen.AddConn(key, conn.SetSymbol(key))
-			// 	_ = Communication(targetConn, conn)
-			// 	listen.DelConn(targetConn.GetSymbol(), conn.GetSymbol())
-			// 	break
-			// }
-		} else {
-			logger.Info("target port does not exist")
-		}
-	} else {
+	// 每一步都可能在取值前因客户端并发断开而被移除，必须逐级判 nil
+	client := s.GetClient(msg.Symbol)
+	if client == nil {
 		logger.Info("link failed: client or target port not found")
+		return
 	}
+	listen := client.GetListen(msg.TargetSymbol)
+	if listen == nil {
+		logger.Info("target port does not exist")
+		return
+	}
+	targetConn := listen.ActivateConn(msg.Name)
+	if targetConn == nil {
+		logger.Info("target port does not exist")
+		return
+	}
+	key := getKey()
+	listen.AddConn(key, conn.SetSymbol(key))
+	_ = CommunicationWithTimeout(targetConn, conn, s.dataTimeout())
+	listen.DelConn(targetConn.GetSymbol(), conn.GetSymbol())
 }
 
 // Register 注册客户端
@@ -365,10 +364,10 @@ func (s *Server) IsListenExist(clientSymbol, serverPort string) bool {
 
 // NewListen 申请添加客户端，添加端口
 func (s *Server) NewListen(clientSymbol, localPort, serverPort string) error {
-	if !s.IsExist(clientSymbol) {
+	client := s.GetClient(clientSymbol)
+	if client == nil {
 		return errors.New("client is not exist! ")
 	}
-	client := s.GetClient(clientSymbol)
 	if client.IsExist(serverPort) {
 		return errors.New("client port exist")
 	}
@@ -429,8 +428,8 @@ func (s *Server) Close() error {
 // DelClientF 永久删除客户端
 func (s *Server) DelClientF(symbols ...string) error {
 	for _, v := range symbols {
-		if s.IsExist(v) {
-			client := s.GetClient(v)
+		// 客户端可能在检查与取值之间断开，GetClient 可能返回 nil
+		if client := s.GetClient(v); client != nil {
 			err := client.Send(message.Message{
 				Type:   message.MsgTypeDel,
 				Symbol: v,
@@ -445,20 +444,16 @@ func (s *Server) DelClientF(symbols ...string) error {
 
 // CloseListen 关闭监听
 func (s *Server) CloseListen(clientSymbol, localPort, serverPort string) error {
-	if s.IsExist(clientSymbol) {
-		client := s.GetClient(clientSymbol)
-		if client.IsExist(serverPort) {
-			listen := client.GetListen(serverPort)
-			client.DelListenIf(serverPort, listen)
-			err := listen.Stop()
-			if err != nil {
-				return err
-			}
-			return nil
-		}
+	client := s.GetClient(clientSymbol)
+	if client == nil {
+		return errors.New("client is not exist! ")
+	}
+	listen := client.GetListen(serverPort)
+	if listen == nil {
 		return errors.New("client of listen is not exist! ")
 	}
-	return errors.New("client is not exist! ")
+	client.DelListenIf(serverPort, listen)
+	return listen.Stop()
 }
 
 // GetAddr 获取服务端

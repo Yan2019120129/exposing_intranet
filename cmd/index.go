@@ -14,8 +14,8 @@ var rootCmd = cobra.Command{
 	Use:   "base",
 	Short: "b",
 	Long:  "my base",
-	Run: func(cmd *cobra.Command, args []string) {
-		app.StartServer()
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return app.StartServer()
 	},
 }
 

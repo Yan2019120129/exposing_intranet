@@ -144,8 +144,12 @@ func (c *Config) SetSymbol(symbol string) {
 		fmt.Printf("create symbol directory: %v\n", err)
 		return
 	}
-	if err := os.WriteFile(path, []byte(symbol), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(symbol), 0600); err != nil {
 		fmt.Printf("write client symbol: %v\n", err)
+		return
+	}
+	if err := os.Chmod(path, 0600); err != nil {
+		fmt.Printf("set client symbol permissions: %v\n", err)
 	}
 }
 

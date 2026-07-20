@@ -2,7 +2,6 @@ package utils
 
 import (
 	"bytes"
-	"errors"
 	"os/exec"
 	"strings"
 )
@@ -33,10 +32,7 @@ func Exec(cmd *exec.Cmd) (string, error) {
 		return "", err
 	}
 
-	val := stderr.String()
+	val := stdout.String()
 	val = strings.Trim(val, "\n")
-	if val != "" {
-		return "", errors.New(stderr.String())
-	}
 	return val, nil
 }

@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"my-base/app/router"
 	"my-base/app/tables"
@@ -24,8 +25,11 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func StartServer() {
-	cfg := configs.GetConfig()
+func StartServer() error {
+	cfg, err := configs.RequireConfig()
+	if err != nil {
+		return fmt.Errorf("load server configuration: %w", err)
+	}
 	gin.SetMode(gin.ReleaseMode)
 	gin.DefaultWriter = io.Discard
 
@@ -70,8 +74,8 @@ func StartServer() {
 
 	go func() {
 		logger.Info("|********** http://localhost" + srv.Addr + cfg.Admin.Prefix() + "**********|")
-		if err := srv.ListenAndServe(); err != nil && errors.Is(err, http.ErrServerClosed) {
-			logger.Info("listen:", err)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Fatal("listen:", err)
 		}
 	}()
 
@@ -110,4 +114,5 @@ func StartServer() {
 	eng.DefaultConnection().Close()
 
 	logger.Info("Server exiting")
+	return nil
 }

@@ -12,7 +12,8 @@ import (
 
 // Config 服务端配置实例
 var (
-	c *Config
+	c         *Config
+	configErr error
 )
 
 // Config 服务配置
@@ -110,21 +111,27 @@ func (c *ConnectConfig) GetWaitConnTimeout() int {
 
 // init 初始化服务端配置
 func init() {
+	c, configErr = loadConfig()
+}
+
+func loadConfig() (*Config, error) {
 	path, err := findConfigPath()
 	if err != nil {
-		fmt.Println("finding config.yaml error:", err)
-		return
+		return nil, fmt.Errorf("find config.yaml: %w", err)
 	}
+	return loadConfigFile(path)
+}
 
+func loadConfigFile(path string) (*Config, error) {
 	bytes, err := os.ReadFile(path)
 	if err != nil {
-		fmt.Println("reading config.yaml error:", err)
-		return
+		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
-	if err = yaml.Unmarshal(bytes, &c); err != nil {
-		fmt.Println("unmarshal config.yaml error:", err)
-		return
+	var cfg Config
+	if err = yaml.Unmarshal(bytes, &cfg); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
+	return &cfg, nil
 }
 
 func findConfigPath() (string, error) {
@@ -151,6 +158,19 @@ func findConfigPath() (string, error) {
 // GetConfig 获取服务信息
 func GetConfig() *Config {
 	return c
+}
+
+// RequireConfig returns the loaded configuration or its original load error.
+// Callers that cannot operate without server configuration should use this at
+// their boundary rather than dereferencing a nil Config later.
+func RequireConfig() (*Config, error) {
+	if configErr != nil {
+		return nil, configErr
+	}
+	if c == nil {
+		return nil, fmt.Errorf("server configuration was not loaded")
+	}
+	return c, nil
 }
 
 // GetGorm 获取gorm 配置

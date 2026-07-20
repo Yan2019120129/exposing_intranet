@@ -10,6 +10,7 @@ import (
 )
 
 var ErrClientDeleted = transport.ErrClientDeleted
+var ErrClientRegistrationRejected = transport.ErrClientRegistrationRejected
 
 // Runtime owns the client control connection and reconnect policy.
 type Runtime struct {
@@ -31,19 +32,35 @@ func NewRuntime(cfg *configs.Config) *Runtime {
 }
 
 func (r *Runtime) Run(ctx context.Context) error {
+	// StartWithHeartbeat blocks while reading control messages. Closing the
+	// connection on cancellation wakes that read so signal-driven shutdown does
+	// not have to wait for a network timeout or peer activity.
+	stopClose := make(chan struct{})
+	defer close(stopClose)
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = r.Client.Close()
+		case <-stopClose:
+		}
+	}()
+
 	delay := time.Duration(r.Config.GetReconnectBaseDelay()) * time.Second
 	maxDelay := time.Duration(r.Config.GetReconnectMaxDelay()) * time.Second
 	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
 		started := time.Now()
 		err := r.Client.StartWithHeartbeat(
 			time.Duration(r.Config.GetPingInterval())*time.Second,
 			time.Duration(r.Config.GetPongTimeout())*time.Second,
 			r.Config.GetMaxPingFailures(),
 		)
-		if err == nil || errors.Is(err, transport.ErrClientDeleted) {
-			if errors.Is(err, transport.ErrClientDeleted) {
-				return err
-			}
+		if errors.Is(err, transport.ErrClientDeleted) || errors.Is(err, transport.ErrClientRegistrationRejected) {
+			return err
 		}
 		select {
 		case <-ctx.Done():

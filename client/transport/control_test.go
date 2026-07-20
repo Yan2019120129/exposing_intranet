@@ -91,3 +91,44 @@ func TestClientRegistersAndAnswersPing(t *testing.T) {
 		t.Fatalf("assigned symbol = %q, want assigned-symbol", assigned)
 	}
 }
+
+func TestClientStopsOnRegistrationRejection(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		if errors.Is(err, syscall.EPERM) {
+			t.Skipf("sandbox does not permit local listeners: %v", err)
+		}
+		t.Fatalf("listen: %v", err)
+	}
+	defer listener.Close()
+
+	serverDone := make(chan error, 1)
+	go func() {
+		conn, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			serverDone <- acceptErr
+			return
+		}
+		defer conn.Close()
+		control := toolsPenetrate.NewConn(conn)
+		var register message.Message
+		if parseErr := control.ParseMsg(&register); parseErr != nil {
+			serverDone <- parseErr
+			return
+		}
+		serverDone <- control.Send(message.Message{
+			Type: message.MsgTypeClose,
+			Msg:  "Invalid symbol.",
+		})
+	}()
+
+	client := NewClient(listener.Addr().String())
+	client.SetKeyFunc(func() string { return "invalid-symbol" })
+	err = client.Start()
+	if !errors.Is(err, ErrClientRegistrationRejected) {
+		t.Fatalf("Start() error = %v, want ErrClientRegistrationRejected", err)
+	}
+	if serverErr := <-serverDone; serverErr != nil {
+		t.Fatalf("fake server: %v", serverErr)
+	}
+}

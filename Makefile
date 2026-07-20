@@ -33,6 +33,10 @@ prepare:
 			find $(BUILD_DIR)/website/logs -type f -name "*.log" -delete; \
 			echo "已排除日志文件"; \
 		fi; \
+		if [ -f "$(BUILD_DIR)/website/configs/client.key" ]; then \
+			rm -f "$(BUILD_DIR)/website/configs/client.key"; \
+			echo "已排除客户端凭据"; \
+		fi; \
 		if [ -f "$(BUILD_DIR)/website/configs/config.yaml" ]; then \
 			sed -i 's/user: ".*"/user: "car"/' $(BUILD_DIR)/website/configs/config.yaml; \
 			sed -i 's/pwd: ".*"/pwd: "Aa123098.."/' $(BUILD_DIR)/website/configs/config.yaml; \
