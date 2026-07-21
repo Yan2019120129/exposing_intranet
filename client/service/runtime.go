@@ -27,6 +27,7 @@ func NewRuntime(cfg *configs.Config) *Runtime {
 		KeepAlive:       true,
 		KeepAlivePeriod: 30 * time.Second,
 	})
+	client.SetDataTimeout(time.Duration(clientCfg.GetReadWriteTimeout()) * time.Second)
 	client.SetOnKeyFunc(cfg.SetSymbol).SetKeyFunc(cfg.GetSymbol)
 	return &Runtime{Config: clientCfg, Client: client}
 }

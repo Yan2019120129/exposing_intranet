@@ -17,6 +17,7 @@ import (
 )
 
 var (
+	// server 是包级服务端实例。
 	server = &Server{
 		addr:   ":1060",
 		lock:   sync.RWMutex{},
@@ -25,28 +26,38 @@ var (
 	}
 )
 
-// ClientStatus 供后续 Web 展示的客户端状态（先实现 RTT/在线时间）
+// ClientStatus 表示供 Web 层展示的客户端在线状态和网络延迟。
 type ClientStatus struct {
-	Symbol     string `json:"symbol"`
-	LastSeenMs int64  `json:"lastSeenMs"`
-	RttMs      int64  `json:"rttMs"`
+	// Symbol 是客户端唯一标识。
+	Symbol string `json:"symbol"`
+	// LastSeenMs 是最后收到客户端消息的 Unix 毫秒时间戳。
+	LastSeenMs int64 `json:"lastSeenMs"`
+	// RttMs 是最近一次心跳往返时延，未知时为 -1。
+	RttMs int64 `json:"rttMs"`
 }
 
+// Server 管理控制连接、端口映射监听器及客户端状态。
 type Server struct {
-	addr   string
-	lock   sync.RWMutex
+	// addr 是控制服务的监听地址。
+	addr string
+	// lock 保护服务端共享状态。
+	lock sync.RWMutex
+	// listen 是控制服务的网络监听器。
 	listen net.Listener
+	// client 按客户端标识保存当前在线客户端。
 	client map[string]*Client
+	// status 按客户端标识保存最近状态。
 	status map[string]ClientStatus
-	db     *gorm.DB
+	// db 是客户端与端口映射的持久化存储。
+	db *gorm.DB
 }
 
-// GetServer 获取服务端
+// GetServer 返回包级服务端实例。
 func GetServer() *Server {
 	return server
 }
 
-// NewServer 创建服务
+// NewServer 创建并设置包级服务端实例。
 func NewServer(addr string, db *gorm.DB) *Server {
 	server = &Server{
 		addr:   addr,
@@ -58,7 +69,7 @@ func NewServer(addr string, db *gorm.DB) *Server {
 	return server
 }
 
-// Start 启动服务
+// Start 启动控制服务并持续接收客户端连接。
 func (s *Server) Start() error {
 	var err error
 	s.listen, err = net.Listen("tcp", s.addr)
@@ -75,7 +86,7 @@ func (s *Server) Start() error {
 	}
 }
 
-// dealWith 处理方法
+// dealWith 处理单个控制连接的首条消息。
 func (s *Server) dealWith(conn net.Conn) {
 	handConn := transport.NewConnWithOptions(conn, s.controlConnOptions())
 	defer handConn.Close()
@@ -100,7 +111,7 @@ func (s *Server) dealWith(conn net.Conn) {
 	}
 }
 
-// 客户端
+// Status 记录客户端的心跳响应、最后在线时间和往返时延。
 func (s *Server) Status(msg message.Message) {
 	var pong message.PongPayload
 	switch v := msg.Msg.(type) {
@@ -140,7 +151,7 @@ func (s *Server) Status(msg message.Message) {
 	fmt.Println("pong received, seq:", pong.Seq, "rttMs:", rtt)
 }
 
-// GetClientStatus 获取单个客户端状态（后续 Web API 可直接调用）
+// GetClientStatus 返回指定客户端的最近状态。
 func (s *Server) GetClientStatus(symbol string) (ClientStatus, bool) {
 	s.lock.RLock()
 	st, ok := s.status[symbol]
@@ -148,7 +159,7 @@ func (s *Server) GetClientStatus(symbol string) (ClientStatus, bool) {
 	return st, ok
 }
 
-// ListClientStatus 列表（后续 Web API 可直接调用）
+// ListClientStatus 返回所有已记录的客户端状态。
 func (s *Server) ListClientStatus() []ClientStatus {
 	s.lock.RLock()
 	out := make([]ClientStatus, 0, len(s.status))
@@ -159,7 +170,7 @@ func (s *Server) ListClientStatus() []ClientStatus {
 	return out
 }
 
-// 建立连接
+// connect 将客户端数据连接与等待中的公网连接建立双向转发。
 func (s *Server) connect(msg message.Message, conn *transport.Conn) {
 	logger.Info("server received link request")
 	// 每一步都可能在取值前因客户端并发断开而被移除，必须逐级判 nil
@@ -184,7 +195,7 @@ func (s *Server) connect(msg message.Message, conn *transport.Conn) {
 	listen.DelConn(targetConn.GetSymbol(), conn.GetSymbol())
 }
 
-// Register 注册客户端
+// Register 验证并注册客户端，然后维护控制连接及心跳。
 func (s *Server) Register(param message.Message, conn *transport.Conn) {
 	// 必须提供 symbol（通过 HTTP 认证获取）
 	if param.Symbol == "" {
@@ -300,7 +311,7 @@ func (s *Server) Register(param message.Message, conn *transport.Conn) {
 	}
 }
 
-// AddClient 添加客户端
+// AddClient 将客户端写入服务端客户端表。
 func (s *Server) AddClient(key string, client *Client) *Server {
 	s.lock.Lock()
 	s.client[key] = client
@@ -308,6 +319,7 @@ func (s *Server) AddClient(key string, client *Client) *Server {
 	return s
 }
 
+// AddClientIfAbsent 仅在客户端标识尚未注册时添加客户端。
 func (s *Server) AddClientIfAbsent(key string, client *Client) bool {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -318,7 +330,7 @@ func (s *Server) AddClientIfAbsent(key string, client *Client) bool {
 	return true
 }
 
-// GetClient 添加客户端
+// GetClient 按客户端标识获取当前在线客户端。
 func (s *Server) GetClient(key string) *Client {
 	s.lock.RLock()
 	client := s.client[key]
@@ -326,7 +338,7 @@ func (s *Server) GetClient(key string) *Client {
 	return client
 }
 
-// DelClient 删除客户端
+// DelClient 删除一个或多个客户端记录。
 func (s *Server) DelClient(key string, keys ...string) {
 	s.lock.Lock()
 	delete(s.client, key)
@@ -336,6 +348,7 @@ func (s *Server) DelClient(key string, keys ...string) {
 	s.lock.Unlock()
 }
 
+// DelClientIf 仅当当前记录仍为指定客户端时删除该记录。
 func (s *Server) DelClientIf(key string, client *Client) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -344,7 +357,7 @@ func (s *Server) DelClientIf(key string, client *Client) {
 	}
 }
 
-// IsExist 是否存在
+// IsExist 返回指定客户端是否已注册。
 func (s *Server) IsExist(key string) bool {
 	s.lock.RLock()
 	_, ok := s.client[key]
@@ -352,8 +365,7 @@ func (s *Server) IsExist(key string) bool {
 	return ok
 }
 
-// IsListenExist reports whether a public port listener is active for a
-// connected client.
+// IsListenExist 返回指定客户端是否存在指定的公网端口监听器。
 func (s *Server) IsListenExist(clientSymbol, serverPort string) bool {
 	if !s.IsExist(clientSymbol) {
 		return false
@@ -362,7 +374,7 @@ func (s *Server) IsListenExist(clientSymbol, serverPort string) bool {
 	return client != nil && client.IsExist(serverPort)
 }
 
-// NewListen 申请添加客户端，添加端口
+// NewListen 为指定客户端创建并启动公网端口监听器。
 func (s *Server) NewListen(clientSymbol, localPort, serverPort string) error {
 	client := s.GetClient(clientSymbol)
 	if client == nil {
@@ -390,6 +402,8 @@ func (s *Server) NewListen(clientSymbol, localPort, serverPort string) error {
 	if err := listen.Bind(); err != nil {
 		return err
 	}
+	// 先登记后启动，避免 Serve 或 Client.Close 在间隙结束后留下失效监听器。
+	client.AddListen(serverPort, listen)
 	go func() {
 		defer client.DelListenIf(serverPort, listen)
 		err := listen.Serve()
@@ -397,12 +411,10 @@ func (s *Server) NewListen(clientSymbol, localPort, serverPort string) error {
 			logger.Info("listen start fail:", err)
 		}
 	}()
-
-	client.AddListen(serverPort, listen)
 	return nil
 }
 
-// Close 关闭资源
+// Close 关闭控制监听器及所有客户端资源。
 func (s *Server) Close() error {
 	s.lock.RLock()
 	clients := make([]*Client, 0, len(s.client))
@@ -425,7 +437,7 @@ func (s *Server) Close() error {
 	return nil
 }
 
-// DelClientF 永久删除客户端
+// DelClientF 通知指定客户端其身份已被永久删除。
 func (s *Server) DelClientF(symbols ...string) error {
 	for _, v := range symbols {
 		// 客户端可能在检查与取值之间断开，GetClient 可能返回 nil
@@ -442,7 +454,7 @@ func (s *Server) DelClientF(symbols ...string) error {
 	return nil
 }
 
-// CloseListen 关闭监听
+// CloseListen 关闭指定客户端的公网端口监听器。
 func (s *Server) CloseListen(clientSymbol, localPort, serverPort string) error {
 	client := s.GetClient(clientSymbol)
 	if client == nil {
@@ -456,17 +468,18 @@ func (s *Server) CloseListen(clientSymbol, localPort, serverPort string) error {
 	return listen.Stop()
 }
 
-// GetAddr 获取服务端
+// GetAddr 返回控制服务的监听地址。
 func (s *Server) GetAddr() string {
 	return s.addr
 }
 
-// SetAddr 设置服务端监听地址
+// SetAddr 设置控制服务的监听地址。
 func (s *Server) SetAddr(addr string) *Server {
 	s.addr = addr
 	return s
 }
 
+// controlConnOptions 返回控制连接使用的超时和 TCP 保活配置。
 func (s *Server) controlConnOptions() transport.ConnOptions {
 	options := transport.ConnOptions{
 		ReadTimeout:  30 * time.Second,
@@ -481,6 +494,7 @@ func (s *Server) controlConnOptions() transport.ConnOptions {
 	return options
 }
 
+// dataTimeout 返回数据转发连接的读写空闲超时。
 func (s *Server) dataTimeout() time.Duration {
 	if cfg := configs.GetConnect(); cfg != nil {
 		return time.Duration(cfg.GetReadWriteTimeout()) * time.Second
@@ -488,6 +502,7 @@ func (s *Server) dataTimeout() time.Duration {
 	return 0
 }
 
+// pingSentAt 从心跳消息中提取发送时间的 Unix 毫秒时间戳。
 func pingSentAt(msg message.Message) int64 {
 	switch value := msg.Msg.(type) {
 	case message.PingPayload:

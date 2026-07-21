@@ -7,3 +7,4 @@ client:
   max-ping-failures: 3
   reconnect-base-delay: 2
   reconnect-max-delay: 30
+  readwrite-timeout: 300

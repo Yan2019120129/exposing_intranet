@@ -29,13 +29,24 @@ type Client struct {
 	GetKey          func() string
 	conn            *toolsPenetrate.Conn
 	connOptions     toolsPenetrate.ConnOptions
+	dataTimeout     time.Duration
 	lastControlSeen atomic.Int64
 }
 
-func NewClient(addr string) *Client { return &Client{addr: addr} }
+const defaultDataTimeout = 300 * time.Second
+
+func NewClient(addr string) *Client { return &Client{addr: addr, dataTimeout: defaultDataTimeout} }
 
 func (c *Client) SetConnOptions(options toolsPenetrate.ConnOptions) *Client {
 	c.connOptions = options
+	return c
+}
+
+// SetDataTimeout sets the idle read/write timeout for data mappings.
+func (c *Client) SetDataTimeout(timeout time.Duration) *Client {
+	if timeout > 0 {
+		c.dataTimeout = timeout
+	}
 	return c
 }
 
@@ -185,8 +196,8 @@ func (c *Client) Copy(targetConn, conn net.Conn) {
 	defer conn.Close()
 	defer targetConn.Close()
 	results := make(chan error, 2)
-	go func() { results <- copyHalfClose(targetConn, conn) }()
-	go func() { results <- copyHalfClose(conn, targetConn) }()
+	go func() { results <- copyHalfClose(targetConn, conn, c.dataTimeout) }()
+	go func() { results <- copyHalfClose(conn, targetConn, c.dataTimeout) }()
 	first := <-results
 	if !normalCopyEnd(first) {
 		_ = conn.Close()
@@ -200,12 +211,42 @@ func (c *Client) Copy(targetConn, conn net.Conn) {
 	}
 }
 
-func copyHalfClose(dst, src net.Conn) error {
-	_, err := io.Copy(dst, src)
+func copyHalfClose(dst, src net.Conn, timeout time.Duration) error {
+	var reader io.Reader = src
+	var writer io.Writer = dst
+	if timeout > 0 {
+		reader = deadlineReader{conn: src, timeout: timeout}
+		writer = deadlineWriter{conn: dst, timeout: timeout}
+	}
+	_, err := io.Copy(writer, reader)
 	if tcpConn, ok := dst.(*net.TCPConn); ok {
 		_ = tcpConn.CloseWrite()
 	}
 	return err
+}
+
+type deadlineReader struct {
+	conn    net.Conn
+	timeout time.Duration
+}
+
+func (r deadlineReader) Read(p []byte) (int, error) {
+	if err := r.conn.SetReadDeadline(time.Now().Add(r.timeout)); err != nil {
+		return 0, err
+	}
+	return r.conn.Read(p)
+}
+
+type deadlineWriter struct {
+	conn    net.Conn
+	timeout time.Duration
+}
+
+func (w deadlineWriter) Write(p []byte) (int, error) {
+	if err := w.conn.SetWriteDeadline(time.Now().Add(w.timeout)); err != nil {
+		return 0, err
+	}
+	return w.conn.Write(p)
 }
 
 func normalCopyEnd(err error) bool {

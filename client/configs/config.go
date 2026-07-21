@@ -17,6 +17,7 @@ const (
 	defaultMaxPingFailures    = 3
 	defaultReconnectBaseDelay = 2
 	defaultReconnectMaxDelay  = 60
+	defaultReadWriteTimeout   = 300
 )
 
 // Config is the configuration root for the client executable.
@@ -35,6 +36,7 @@ type ClientConfig struct {
 	MaxPingFailures    int    `yaml:"max-ping-failures"`
 	ReconnectBaseDelay int    `yaml:"reconnect-base-delay"`
 	ReconnectMaxDelay  int    `yaml:"reconnect-max-delay"`
+	ReadWriteTimeout   int    `yaml:"readwrite-timeout"`
 }
 
 var current = load()
@@ -76,6 +78,9 @@ func withDefaults(cfg *Config) *Config {
 	}
 	if cfg.Client.ReconnectMaxDelay <= 0 {
 		cfg.Client.ReconnectMaxDelay = defaultReconnectMaxDelay
+	}
+	if cfg.Client.ReadWriteTimeout <= 0 {
+		cfg.Client.ReadWriteTimeout = defaultReadWriteTimeout
 	}
 	return cfg
 }
@@ -198,4 +203,11 @@ func (c *ClientConfig) GetReconnectMaxDelay() int {
 		return defaultReconnectMaxDelay
 	}
 	return c.ReconnectMaxDelay
+}
+
+func (c *ClientConfig) GetReadWriteTimeout() int {
+	if c.ReadWriteTimeout <= 0 {
+		return defaultReadWriteTimeout
+	}
+	return c.ReadWriteTimeout
 }

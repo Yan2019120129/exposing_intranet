@@ -10,22 +10,37 @@ import (
 	"github.com/GoAdminGroup/go-admin/modules/logger"
 )
 
+// Listen 管理一个公网端口监听器及其等待配对的数据连接。
 type Listen struct {
-	lock            sync.RWMutex
-	addr            string
-	mapPort         string
-	Notify          func(msg message.Message) error
-	listen          net.Listener
-	connList        map[string]*transport.Conn
-	waitSince       map[string]time.Time
-	waitTimeout     time.Duration
+	// lock 保护监听器状态和连接索引。
+	lock sync.RWMutex
+	// addr 是公网监听地址。
+	addr string
+	// mapPort 是客户端本地映射地址。
+	mapPort string
+	// Notify 用于将新公网连接通知给所属客户端。
+	Notify func(msg message.Message) error
+	// listen 是底层网络监听器。
+	listen net.Listener
+	// connList 按连接标识保存等待或正在转发的数据连接。
+	connList map[string]*transport.Conn
+	// waitSince 记录等待配对连接的开始时间。
+	waitSince map[string]time.Time
+	// waitTimeout 是等待配对连接的最长等待时间。
+	waitTimeout time.Duration
+	// cleanupInterval 是等待连接清理任务的执行间隔。
 	cleanupInterval time.Duration
+	// keepAlivePeriod 是公网 TCP 连接的保活探测间隔。
 	keepAlivePeriod time.Duration
-	stopOnce        sync.Once
-	stopCh          chan struct{}
+	// stopped 表示监听器是否已停止，受 lock 保护。
+	stopped bool
+	// stopOnce 确保停止逻辑只执行一次。
+	stopOnce sync.Once
+	// stopCh 用于通知接收和清理协程退出。
+	stopCh chan struct{}
 }
 
-// NewListen 新建监听
+// NewListen 创建一个尚未绑定端口的公网监听器。
 func NewListen(addr, mapPort string) *Listen {
 	return &Listen{
 		addr:            addr,
@@ -38,7 +53,7 @@ func NewListen(addr, mapPort string) *Listen {
 	}
 }
 
-// SetTimeouts configures waiting-connection cleanup and TCP keepalive.
+// SetTimeouts 设置等待连接清理和 TCP 保活参数。
 func (l *Listen) SetTimeouts(waitTimeout, cleanupInterval, keepAlivePeriod time.Duration) *Listen {
 	if waitTimeout > 0 {
 		l.waitTimeout = waitTimeout
@@ -50,8 +65,7 @@ func (l *Listen) SetTimeouts(waitTimeout, cleanupInterval, keepAlivePeriod time.
 	return l
 }
 
-// Bind reserves the public port synchronously. Callers can safely persist a
-// mapping only after Bind returns nil.
+// Bind 同步绑定公网端口；仅在成功后调用方才可持久化端口映射。
 func (l *Listen) Bind() error {
 	l.lock.Lock()
 	defer l.lock.Unlock()
@@ -69,7 +83,7 @@ func (l *Listen) Bind() error {
 	return nil
 }
 
-// Start binds and serves the listener. Bind is intentionally synchronous.
+// Start 同步绑定端口后开始接收公网连接。
 func (l *Listen) Start() error {
 	if err := l.Bind(); err != nil {
 		return err
@@ -77,7 +91,7 @@ func (l *Listen) Start() error {
 	return l.Serve()
 }
 
-// Serve accepts public connections after Bind has succeeded.
+// Serve 在端口绑定成功后持续接收公网连接。
 func (l *Listen) Serve() error {
 	l.lock.RLock()
 	listener := l.listen
@@ -94,6 +108,8 @@ func (l *Listen) Serve() error {
 				return nil
 			default:
 			}
+			// 非预期 Accept 错误时必须释放监听器和全部跟踪连接，避免端口泄漏。
+			_ = l.Stop()
 			return err
 		}
 		if tcpConn, ok := conn.(*net.TCPConn); ok {
@@ -106,14 +122,14 @@ func (l *Listen) Serve() error {
 	}
 }
 
-// dealWith 处理方法
+// dealWith 将新公网连接登记为等待状态并通知所属客户端建立映射。
 func (l *Listen) dealWith(conn net.Conn) {
 	key := getKey()
 	handConn := transport.NewConn(conn).SetSymbol(key).SetStatusWait()
-	l.AddConn(key, handConn)
-	l.lock.Lock()
-	l.waitSince[key] = time.Now()
-	l.lock.Unlock()
+	if !l.addWaitingConn(key, handConn) {
+		_ = handConn.Close()
+		return
+	}
 	if err := l.Notify(message.Message{Name: key, Symbol: key, Type: message.MsgTypeLink, TargetSymbol: l.addr, Msg: l.mapPort}); err != nil {
 		l.DelConn(key)
 		_ = handConn.Close()
@@ -122,12 +138,13 @@ func (l *Listen) dealWith(conn net.Conn) {
 	}
 }
 
-// Stop 关闭服务
+// Stop 关闭监听器、已跟踪连接及等待连接清理协程。
 func (l *Listen) Stop() error {
 	var closeErr error
 	l.stopOnce.Do(func() {
 		close(l.stopCh)
 		l.lock.Lock()
+		l.stopped = true
 		connections := make([]*transport.Conn, 0, len(l.connList))
 		for _, conn := range l.connList {
 			connections = append(connections, conn)
@@ -152,29 +169,29 @@ func (l *Listen) Stop() error {
 	return closeErr
 }
 
-// SetNotify 通知上级的方法
+// SetNotify 设置新公网连接的通知回调。
 func (l *Listen) SetNotify(fn func(msg message.Message) error) *Listen {
 	l.Notify = fn
 	return l
 }
 
-// GetAddr 获取地址
+// GetAddr 返回公网监听地址。
 func (l *Listen) GetAddr() string {
 	return l.addr
 }
 
-// GetMapPort 获取映射的端口
+// GetMapPort 返回客户端本地映射地址。
 func (l *Listen) GetMapPort() string {
 	return l.mapPort
 }
 
-// SetMapPort 设置映射的端口
+// SetMapPort 设置客户端本地映射地址。
 func (l *Listen) SetMapPort(mapPort string) *Listen {
 	l.mapPort = mapPort
 	return l
 }
 
-// GetConn 获取连接
+// GetConn 按连接标识获取已跟踪的数据连接。
 func (l *Listen) GetConn(key string) *transport.Conn {
 	l.lock.RLock()
 	conn := l.connList[key]
@@ -182,10 +199,7 @@ func (l *Listen) GetConn(key string) *transport.Conn {
 	return conn
 }
 
-// ActivateConn marks a waiting public connection as matched. The state
-// transition and removal from the wait-timeout set are kept under the same
-// listener lock so the reaper cannot close the connection between the match
-// lookup and activation.
+// ActivateConn 将等待中的公网连接标记为已配对，并取消其等待超时清理。
 func (l *Listen) ActivateConn(key string) *transport.Conn {
 	l.lock.Lock()
 	defer l.lock.Unlock()
@@ -198,7 +212,7 @@ func (l *Listen) ActivateConn(key string) *transport.Conn {
 	return conn
 }
 
-// DelConn 删除连接
+// DelConn 删除一个主连接及可选的关联连接记录。
 func (l *Listen) DelConn(key string, keys ...string) *Listen {
 	l.lock.Lock()
 	delete(l.connList, key)
@@ -211,7 +225,7 @@ func (l *Listen) DelConn(key string, keys ...string) *Listen {
 	return l
 }
 
-// GetWaitConnList 获取等待的链接
+// GetWaitConnList 返回所有等待与客户端配对的连接。
 func (l *Listen) GetWaitConnList() (connList []*transport.Conn) {
 	l.lock.RLock()
 	for _, conn := range l.connList {
@@ -223,14 +237,29 @@ func (l *Listen) GetWaitConnList() (connList []*transport.Conn) {
 	return
 }
 
-// AddConn 添加连接
+// AddConn 在监听器未停止时登记数据连接。
 func (l *Listen) AddConn(key string, conn *transport.Conn) *Listen {
 	l.lock.Lock()
-	l.connList[key] = conn
+	if !l.stopped {
+		l.connList[key] = conn
+	}
 	l.lock.Unlock()
 	return l
 }
 
+// addWaitingConn 在监听器存活时原子地登记等待连接及其开始时间。
+func (l *Listen) addWaitingConn(key string, conn *transport.Conn) bool {
+	l.lock.Lock()
+	defer l.lock.Unlock()
+	if l.stopped {
+		return false
+	}
+	l.connList[key] = conn
+	l.waitSince[key] = time.Now()
+	return true
+}
+
+// reapWaiters 定期关闭等待配对超时的公网连接。
 func (l *Listen) reapWaiters() {
 	interval := l.cleanupInterval
 	if interval <= 0 {
@@ -255,8 +284,7 @@ func (l *Listen) reapWaiters() {
 					continue
 				}
 				if !conn.IsWait() {
-					// A matched/active connection is no longer waiting even if
-					// an older caller left a timestamp behind.
+					// 已配对连接不再等待，即使旧调用方遗留了等待时间记录。
 					delete(l.waitSince, key)
 					continue
 				}

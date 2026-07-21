@@ -132,3 +132,23 @@ func TestClientStopsOnRegistrationRejection(t *testing.T) {
 		t.Fatalf("fake server: %v", serverErr)
 	}
 }
+
+func TestCopyClosesIdleMappingAfterDataTimeout(t *testing.T) {
+	targetConn, targetPeer := net.Pipe()
+	defer targetPeer.Close()
+	mappingConn, mappingPeer := net.Pipe()
+	defer mappingPeer.Close()
+
+	client := NewClient("").SetDataTimeout(50 * time.Millisecond)
+	done := make(chan struct{})
+	go func() {
+		client.Copy(targetConn, mappingConn)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("Copy did not close an idle mapping after data timeout")
+	}
+}

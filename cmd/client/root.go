@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -82,7 +83,7 @@ func StartClient() error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	defer runtime.Close()
-	if err := runtime.Run(ctx); err != nil && err != clientservice.ErrClientDeleted {
+	if err := runtime.Run(ctx); err != nil && !errors.Is(err, clientservice.ErrClientDeleted) {
 		return fmt.Errorf("client runtime: %w", err)
 	}
 	log.Println("client stopped")
