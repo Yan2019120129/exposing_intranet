@@ -22,7 +22,8 @@ func NewRuntime(cfg *configs.Config) *Runtime {
 	clientCfg := cfg.GetClientConfig()
 	client := transport.NewClient(clientCfg.GetPublicJobAddr())
 	client.SetConnOptions(transport.ConnOptions{
-		ReadTimeout:     time.Duration(clientCfg.GetPingInterval()+clientCfg.GetPongTimeout()) * time.Second,
+		// 每个会话独立的心跳 watcher 负责存活检测，并关闭对应连接以唤醒阻塞的控制读取。
+		ReadTimeout:     0,
 		WriteTimeout:    time.Duration(clientCfg.GetPongTimeout()) * time.Second,
 		KeepAlive:       true,
 		KeepAlivePeriod: 30 * time.Second,

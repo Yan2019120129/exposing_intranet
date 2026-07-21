@@ -61,3 +61,47 @@ func TestClientServiceRegister(t *testing.T) {
 		t.Fatalf("expected invalid credentials, got %v", err)
 	}
 }
+
+type observingDeleteRuntime struct {
+	db        *gorm.DB
+	symbols   []string
+	rowGone   bool
+	portsGone bool
+}
+
+func (r *observingDeleteRuntime) DelClientF(symbols ...string) error {
+	r.symbols = append(r.symbols, symbols...)
+	var clients int64
+	var ports int64
+	if err := r.db.Model(&models.Client{}).Where("symbol IN ?", symbols).Count(&clients).Error; err != nil {
+		return err
+	}
+	if err := r.db.Model(&models.Port{}).Count(&ports).Error; err != nil {
+		return err
+	}
+	r.rowGone = clients == 0
+	r.portsGone = ports == 0
+	return nil
+}
+
+func TestClientDeleteCommitsDatabaseBeforeRuntimeCleanup(t *testing.T) {
+	db := openClientServiceDB(t)
+	client := models.Client{Name: "delete-me", Symbol: "delete-symbol", Status: models.StatusActive}
+	if err := db.Create(&client).Error; err != nil {
+		t.Fatalf("create client: %v", err)
+	}
+	if err := db.Create(&models.Port{ClientId: client.Id, Server: ":18090", Local: ":8090"}).Error; err != nil {
+		t.Fatalf("create port: %v", err)
+	}
+
+	runtime := &observingDeleteRuntime{db: db}
+	if err := NewClientService(db, runtime).DeleteByIDs([]int{client.Id}); err != nil {
+		t.Fatalf("delete client: %v", err)
+	}
+	if len(runtime.symbols) != 1 || runtime.symbols[0] != client.Symbol {
+		t.Fatalf("runtime symbols = %v", runtime.symbols)
+	}
+	if !runtime.rowGone || !runtime.portsGone {
+		t.Fatalf("runtime cleanup ran before commit: clientGone=%v portsGone=%v", runtime.rowGone, runtime.portsGone)
+	}
+}

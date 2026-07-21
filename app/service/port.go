@@ -154,6 +154,9 @@ func (s *PortService) create(clientID int, serverPort, localAddr, comment, symbo
 		if bound {
 			_ = s.Runtime.CloseListen(symbol, localAddr, serverPort)
 		}
+		if errors.Is(err, repository.ErrDuplicateKey) {
+			return PortMapping{}, ErrPortConflict
+		}
 		return PortMapping{}, err
 	}
 	return PortMapping{ServerPort: serverPort, LocalAddr: localAddr, Comment: comment, Status: "active"}, nil
@@ -203,7 +206,7 @@ func normalizeServerPort(value string) (string, error) {
 	value = strings.TrimPrefix(strings.TrimSpace(value), ":")
 	port, err := strconv.Atoi(value)
 	if err != nil || port < 1 || port > 65535 {
-		return "", fmt.Errorf("服务端口必须是 1-65535")
+		return "", fmt.Errorf("%w: 服务端口必须是 1-65535", ErrInvalidPort)
 	}
 	return ":" + strconv.Itoa(port), nil
 }
@@ -212,11 +215,11 @@ func validateLocalAddr(value string) error {
 	value = strings.TrimSpace(value)
 	_, port, err := net.SplitHostPort(value)
 	if err != nil {
-		return fmt.Errorf("本地地址必须是 host:port 格式")
+		return fmt.Errorf("%w: 本地地址必须是 host:port 格式", ErrInvalidPort)
 	}
 	portNumber, err := strconv.Atoi(port)
 	if err != nil || portNumber < 1 || portNumber > 65535 {
-		return fmt.Errorf("本地端口必须是 1-65535")
+		return fmt.Errorf("%w: 本地端口必须是 1-65535", ErrInvalidPort)
 	}
 	return nil
 }

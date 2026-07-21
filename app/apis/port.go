@@ -40,7 +40,11 @@ func (e Port) Manage(ctx *gin.Context) {
 		Comment:    req.Comment,
 	})
 	if err != nil {
-		ctx.JSON(portErrorStatus(err), PortResponse{Success: false, Message: portErrorMessage(err)})
+		status := portErrorStatus(err)
+		if status == http.StatusInternalServerError && e.Logger != nil {
+			e.Logger.Error("manage port mapping:", err)
+		}
+		ctx.JSON(status, PortResponse{Success: false, Message: portErrorMessage(err)})
 		return
 	}
 
@@ -85,11 +89,13 @@ func portErrorMessage(err error) string {
 		return "客户端未注册"
 	case errors.Is(err, service.ErrPortNotFound):
 		return "端口映射不存在"
+	case errors.Is(err, service.ErrInvalidPort):
+		return "端口参数无效"
 	case errors.Is(err, service.ErrInvalidAction):
 		return "无效的操作类型，支持: add, del, list"
 	case errors.Is(err, service.ErrPortConflict):
-		return "服务端口已被占用"
+		return "服务端口或本地端口已被占用"
 	default:
-		return err.Error()
+		return "服务器内部错误"
 	}
 }

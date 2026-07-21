@@ -8,6 +8,7 @@ import (
 	"net"
 	"os/user"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -24,13 +25,13 @@ type ConnOptions = toolsPenetrate.ConnOptions
 
 // Client is the client-side control connection and mapping coordinator.
 type Client struct {
-	addr            string
-	OnKey           func(string)
-	GetKey          func() string
-	conn            *toolsPenetrate.Conn
-	connOptions     toolsPenetrate.ConnOptions
-	dataTimeout     time.Duration
-	lastControlSeen atomic.Int64
+	addr        string
+	OnKey       func(string)
+	GetKey      func() string
+	connMu      sync.RWMutex
+	conn        *toolsPenetrate.Conn
+	connOptions toolsPenetrate.ConnOptions
+	dataTimeout time.Duration
 }
 
 const defaultDataTimeout = 300 * time.Second
@@ -50,48 +51,73 @@ func (c *Client) SetDataTimeout(timeout time.Duration) *Client {
 	return c
 }
 
-func (c *Client) Link() error {
+func (c *Client) link() (*toolsPenetrate.Conn, error) {
 	conn, err := net.Dial("tcp", c.addr)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	c.conn = toolsPenetrate.NewConnWithOptions(conn, c.connOptions)
+	control := toolsPenetrate.NewConnWithOptions(conn, c.connOptions)
 	key := ""
 	if c.GetKey != nil {
 		key = c.GetKey()
 	}
-	if err := c.conn.Send(message.Message{
+	if err := control.Send(message.Message{
 		Symbol: key,
 		Name:   c.GetName(),
 		Type:   message.MsgTypeRegister,
 	}); err != nil {
-		_ = c.conn.Close()
-		return err
+		_ = control.Close()
+		return nil, err
 	}
-	return nil
+
+	c.connMu.Lock()
+	previous := c.conn
+	c.conn = control
+	c.connMu.Unlock()
+	if previous != nil && previous != control {
+		_ = previous.Close()
+	}
+	return control, nil
+}
+
+func (c *Client) Link() error {
+	_, err := c.link()
+	return err
 }
 
 func (c *Client) Start() error { return c.StartWithHeartbeat(0, 0, 0) }
 
 func (c *Client) StartWithHeartbeat(interval, pongTimeout time.Duration, maxFailures int) error {
-	if err := c.Link(); err != nil {
+	conn, err := c.link()
+	if err != nil {
 		return err
 	}
-	defer c.Close()
 	log.Println("connection succeeded")
-	c.lastControlSeen.Store(time.Now().UnixNano())
+	lastControlSeen := &atomic.Int64{}
+	lastControlSeen.Store(time.Now().UnixNano())
 	stopWatch := make(chan struct{})
-	defer close(stopWatch)
+	watchDone := make(chan struct{})
 	if interval > 0 {
-		go c.watchHeartbeat(interval, pongTimeout, maxFailures, stopWatch)
+		go func() {
+			defer close(watchDone)
+			c.watchHeartbeat(conn, lastControlSeen, interval, pongTimeout, maxFailures, stopWatch)
+		}()
+	} else {
+		close(watchDone)
 	}
+	defer func() {
+		close(stopWatch)
+		<-watchDone
+		_ = conn.Close()
+		c.clearConnIf(conn)
+	}()
 
 	for {
 		var msg message.Message
-		if err := c.conn.ParseMsg(&msg); err != nil {
+		if err := conn.ParseMsg(&msg); err != nil {
 			return err
 		}
-		c.lastControlSeen.Store(time.Now().UnixNano())
+		lastControlSeen.Store(time.Now().UnixNano())
 		switch {
 		case msg.EqRegister():
 			if c.OnKey != nil {
@@ -111,7 +137,7 @@ func (c *Client) StartWithHeartbeat(interval, pongTimeout time.Duration, maxFail
 			msg.Msg = message.PongPayload{
 				Seq: ping.Seq, SentAtMs: ping.SentAtMs, ClientAtMs: time.Now().UnixMilli(),
 			}
-			if err := c.conn.Send(msg); err != nil {
+			if err := conn.Send(msg); err != nil {
 				return err
 			}
 		case msg.EqLink():
@@ -129,21 +155,26 @@ func (c *Client) StartWithHeartbeat(interval, pongTimeout time.Duration, maxFail
 	}
 }
 
-func (c *Client) watchHeartbeat(interval, pongTimeout time.Duration, maxFailures int, stop <-chan struct{}) {
+func heartbeatTimeout(interval, pongTimeout time.Duration, maxFailures int) time.Duration {
 	if pongTimeout <= 0 {
 		pongTimeout = 3 * interval
 	}
 	if maxFailures <= 0 {
 		maxFailures = 3
 	}
+	return pongTimeout + time.Duration(maxFailures-1)*interval
+}
+
+func (c *Client) watchHeartbeat(conn *toolsPenetrate.Conn, lastControlSeen *atomic.Int64, interval, pongTimeout time.Duration, maxFailures int, stop <-chan struct{}) {
+	timeout := heartbeatTimeout(interval, pongTimeout, maxFailures)
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
-			last := time.Unix(0, c.lastControlSeen.Load())
-			if time.Since(last) >= time.Duration(maxFailures)*(interval+pongTimeout) {
-				_ = c.Close()
+			last := time.Unix(0, lastControlSeen.Load())
+			if time.Since(last) >= timeout {
+				_ = conn.Close()
 				return
 			}
 		case <-stop:
@@ -153,17 +184,33 @@ func (c *Client) watchHeartbeat(interval, pongTimeout time.Duration, maxFailures
 }
 
 func (c *Client) Send(msg message.Message) error {
-	if c.conn == nil {
+	conn := c.currentConn()
+	if conn == nil {
 		return net.ErrClosed
 	}
-	return c.conn.Send(msg)
+	return conn.Send(msg)
 }
 
 func (c *Client) Close() error {
-	if c.conn == nil {
+	conn := c.currentConn()
+	if conn == nil {
 		return nil
 	}
-	return c.conn.Close()
+	return conn.Close()
+}
+
+func (c *Client) currentConn() *toolsPenetrate.Conn {
+	c.connMu.RLock()
+	defer c.connMu.RUnlock()
+	return c.conn
+}
+
+func (c *Client) clearConnIf(conn *toolsPenetrate.Conn) {
+	c.connMu.Lock()
+	if c.conn == conn {
+		c.conn = nil
+	}
+	c.connMu.Unlock()
 }
 
 func (c *Client) GetIp() string {

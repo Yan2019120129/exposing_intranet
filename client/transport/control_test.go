@@ -3,6 +3,7 @@ package transport
 import (
 	"errors"
 	"net"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -10,6 +11,90 @@ import (
 	"my-base/code/message"
 	toolsPenetrate "my-base/code/transport"
 )
+
+func TestHeartbeatTimeoutMatchesFailureSchedule(t *testing.T) {
+	got := heartbeatTimeout(30*time.Second, 90*time.Second, 3)
+	if want := 150 * time.Second; got != want {
+		t.Fatalf("heartbeat timeout = %v, want %v", got, want)
+	}
+}
+
+func TestHeartbeatWatcherClosesOnlyItsSession(t *testing.T) {
+	oldConn, oldPeer := net.Pipe()
+	defer oldPeer.Close()
+	newConn, newPeer := net.Pipe()
+	defer newPeer.Close()
+
+	oldControl := toolsPenetrate.NewConnWithOptions(oldConn, ConnOptions{})
+	newControl := toolsPenetrate.NewConnWithOptions(newConn, ConnOptions{})
+	client := NewClient("")
+	client.conn = newControl
+
+	lastSeen := &atomic.Int64{}
+	lastSeen.Store(time.Now().Add(-time.Second).UnixNano())
+	done := make(chan struct{})
+	go func() {
+		client.watchHeartbeat(oldControl, lastSeen, 5*time.Millisecond, 10*time.Millisecond, 1, make(chan struct{}))
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("heartbeat watcher did not stop")
+	}
+	if !oldControl.IsClose() {
+		t.Fatal("watcher did not close its own session")
+	}
+	if newControl.IsClose() || client.currentConn() != newControl {
+		t.Fatal("stale watcher closed or replaced the current session")
+	}
+}
+
+func TestClientHeartbeatClosesSilentControlConnection(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		if errors.Is(err, syscall.EPERM) {
+			t.Skipf("sandbox does not permit local listeners: %v", err)
+		}
+		t.Fatalf("listen: %v", err)
+	}
+	defer listener.Close()
+
+	serverDone := make(chan error, 1)
+	go func() {
+		conn, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			serverDone <- acceptErr
+			return
+		}
+		defer conn.Close()
+		control := toolsPenetrate.NewConn(conn)
+		var register message.Message
+		if parseErr := control.ParseMsg(&register); parseErr != nil {
+			serverDone <- parseErr
+			return
+		}
+		var next message.Message
+		serverDone <- control.ParseMsg(&next)
+	}()
+
+	client := NewClient(listener.Addr().String()).SetKeyFunc(func() string { return "silent" })
+	client.SetConnOptions(ConnOptions{ReadTimeout: 0, WriteTimeout: time.Second})
+	started := time.Now()
+	err = client.StartWithHeartbeat(10*time.Millisecond, 20*time.Millisecond, 2)
+	if err == nil {
+		t.Fatal("expected silent control connection to be closed")
+	}
+	if elapsed := time.Since(started); elapsed > 500*time.Millisecond {
+		t.Fatalf("heartbeat watcher took too long: %v", elapsed)
+	}
+	select {
+	case <-serverDone:
+	case <-time.After(time.Second):
+		t.Fatal("server read was not released by heartbeat close")
+	}
+}
 
 func TestClientRegistersAndAnswersPing(t *testing.T) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")

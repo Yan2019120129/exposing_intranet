@@ -95,6 +95,9 @@ func (s *ClientService) DeleteByIDs(ids []int) error {
 	if err != nil {
 		return err
 	}
+	if err := s.Repository.DeleteByIDs(ids); err != nil {
+		return err
+	}
 	if s.Runtime != nil {
 		symbols := make([]string, 0, len(items))
 		for _, item := range items {
@@ -104,7 +107,7 @@ func (s *ClientService) DeleteByIDs(ids []int) error {
 			return err
 		}
 	}
-	return s.Repository.DeleteByIDs(ids)
+	return nil
 }
 
 func (s *ClientService) NameOptions() ([]repository.ClientNameOption, error) {

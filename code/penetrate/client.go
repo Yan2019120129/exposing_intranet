@@ -147,6 +147,11 @@ func (c *Client) Send(msg message.Message) error {
 	return c.conn.Send(msg)
 }
 
+// SendWithTimeout 在指定的写超时时间内发送控制消息。
+func (c *Client) SendWithTimeout(msg message.Message, timeout time.Duration) error {
+	return c.conn.SendWithTimeout(msg, timeout)
+}
+
 // Ping 按指定间隔持续发送心跳，直到发送失败。
 func (c *Client) Ping(duration time.Duration) error {
 	ch := time.NewTicker(duration)

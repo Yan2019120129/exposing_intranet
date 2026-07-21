@@ -1,10 +1,16 @@
 package repository
 
 import (
+	"errors"
+	"fmt"
+
 	"my-base/app/models"
 
+	mysqlDriver "github.com/go-sql-driver/mysql"
 	"gorm.io/gorm"
 )
+
+var ErrDuplicateKey = errors.New("duplicate key")
 
 type PortRepository struct {
 	DB *gorm.DB
@@ -49,7 +55,15 @@ func (r *PortRepository) Create(port *models.Port) error {
 	if r.DB == nil {
 		return gorm.ErrInvalidDB
 	}
-	return r.DB.Create(port).Error
+	err := r.DB.Create(port).Error
+	if err == nil {
+		return nil
+	}
+	var mysqlErr *mysqlDriver.MySQLError
+	if errors.Is(err, gorm.ErrDuplicatedKey) || (errors.As(err, &mysqlErr) && mysqlErr.Number == 1062) {
+		return fmt.Errorf("%w: %v", ErrDuplicateKey, err)
+	}
+	return err
 }
 
 func (r *PortRepository) DeleteByID(id int) error {

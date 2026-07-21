@@ -183,12 +183,19 @@ func (c *Conn) GetSymbol() string {
 
 // Send 发送信息（带超时）
 func (c *Conn) Send(msg message.Message) error {
+	return c.SendWithTimeout(msg, c.writeTimeout)
+}
+
+// SendWithTimeout 使用调用方指定的写超时时间发送一条消息。
+func (c *Conn) SendWithTimeout(msg message.Message, timeout time.Duration) error {
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
-	if c.writeTimeout > 0 {
-		if err := c.conn.SetWriteDeadline(time.Now().Add(c.writeTimeout)); err != nil {
-			return err
-		}
+	deadline := time.Time{}
+	if timeout > 0 {
+		deadline = time.Now().Add(timeout)
+	}
+	if err := c.conn.SetWriteDeadline(deadline); err != nil {
+		return err
 	}
 	encoder := json.NewEncoder(c.conn)
 	return encoder.Encode(&msg)
@@ -196,10 +203,7 @@ func (c *Conn) Send(msg message.Message) error {
 
 // SendNoTimeout 无超时发送
 func (c *Conn) SendNoTimeout(msg message.Message) error {
-	c.writeMu.Lock()
-	defer c.writeMu.Unlock()
-	encoder := json.NewEncoder(c.conn)
-	return encoder.Encode(&msg)
+	return c.SendWithTimeout(msg, 0)
 }
 
 // Close 关闭连接

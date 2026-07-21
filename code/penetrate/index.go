@@ -26,6 +26,8 @@ var (
 	}
 )
 
+const deleteNotifyTimeout = time.Second
+
 // ClientStatus 表示供 Web 层展示的客户端在线状态和网络延迟。
 type ClientStatus struct {
 	// Symbol 是客户端唯一标识。
@@ -239,6 +241,29 @@ func (s *Server) Register(param message.Message, conn *transport.Conn) {
 		return
 	}
 
+	// 数据库记录可能在首次查询后、连接加入在线表前被删除。恢复监听器前再次校验，
+	// 避免正在注册的连接让已删除客户端重新上线。
+	refreshed, err := clientRepository.FindBySymbol(param.Symbol)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			param.SetMsg("Client deleted.")
+			param.SetType(message.MsgTypeDel)
+			_ = conn.Send(param)
+		}
+		s.DelClientIf(param.Symbol, client)
+		_ = client.Close()
+		return
+	}
+	if models.IsDisabledStatus(refreshed.Status) {
+		param.SetMsg("Client is disabled.")
+		param.SetType(message.MsgTypeClose)
+		_ = conn.Send(param)
+		s.DelClientIf(param.Symbol, client)
+		_ = client.Close()
+		return
+	}
+	clientInfo = refreshed
+
 	// 创建客户端并保证旧连接退出时不会删除新连接
 	stop := make(chan struct{})
 	var stopOnce sync.Once
@@ -357,6 +382,16 @@ func (s *Server) DelClientIf(key string, client *Client) {
 	}
 }
 
+// takeClient 原子地移除并返回客户端的当前会话。
+func (s *Server) takeClient(key string) *Client {
+	s.lock.Lock()
+	client := s.client[key]
+	delete(s.client, key)
+	delete(s.status, key)
+	s.lock.Unlock()
+	return client
+}
+
 // IsExist 返回指定客户端是否已注册。
 func (s *Server) IsExist(key string) bool {
 	s.lock.RLock()
@@ -439,19 +474,21 @@ func (s *Server) Close() error {
 
 // DelClientF 通知指定客户端其身份已被永久删除。
 func (s *Server) DelClientF(symbols ...string) error {
+	var errs []error
 	for _, v := range symbols {
-		// 客户端可能在检查与取值之间断开，GetClient 可能返回 nil
-		if client := s.GetClient(v); client != nil {
-			err := client.Send(message.Message{
+		if client := s.takeClient(v); client != nil {
+			if err := client.SendWithTimeout(message.Message{
 				Type:   message.MsgTypeDel,
 				Symbol: v,
-			})
-			if err != nil {
-				return err
+			}, deleteNotifyTimeout); err != nil {
+				errs = append(errs, fmt.Errorf("notify deleted client %s: %w", v, err))
+			}
+			if err := client.Close(); err != nil {
+				errs = append(errs, fmt.Errorf("close deleted client %s: %w", v, err))
 			}
 		}
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 // CloseListen 关闭指定客户端的公网端口监听器。
