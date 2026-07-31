@@ -26,7 +26,7 @@ func GormLogger(configs ...GormLoggerConfig) gormlogger.Interface {
 	cfg := GormLoggerConfig{
 		SlowThreshold:             defaultGormSlowThreshold,
 		IgnoreRecordNotFoundError: true,
-		LogLevel:                  gormlogger.Warn,
+		LogLevel:                  gormlogger.Info,
 	}
 	if len(configs) > 0 {
 		cfg = configs[0]

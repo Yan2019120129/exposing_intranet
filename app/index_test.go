@@ -56,6 +56,16 @@ func TestTestRoutesDoNotPolluteData(t *testing.T) {
 		t.Fatalf("unexpected list after creates: %+v", list.Data)
 	}
 
+	filtered := requestJSON[apiResponse[[]testDTO]](t, router, http.MethodGet, "/tests?name=alpha", "", http.StatusOK)
+	if len(filtered.Data) != 1 || filtered.Data[0].Id != createdA.Data.Id || filtered.Data[0].Name != "alpha" {
+		t.Fatalf("unexpected filtered list: %+v", filtered.Data)
+	}
+
+	blankFilter := requestJSON[apiResponse[[]testDTO]](t, router, http.MethodGet, "/tests?name=%20%20", "", http.StatusOK)
+	if len(blankFilter.Data) != 2 || blankFilter.Data[0].Id != createdA.Data.Id || blankFilter.Data[1].Id != createdB.Data.Id {
+		t.Fatalf("unexpected blank-filter list: %+v", blankFilter.Data)
+	}
+
 	updatedA := requestJSON[apiResponse[testDTO]](t, router, http.MethodPut, "/tests/"+itoa(createdA.Data.Id), `{"name":"alpha-updated","id":`+itoa(createdB.Data.Id)+`}`, http.StatusOK)
 	if updatedA.Data.Id != createdA.Data.Id || updatedA.Data.Name != "alpha-updated" {
 		t.Fatalf("unexpected update response: %+v", updatedA.Data)

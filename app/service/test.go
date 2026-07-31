@@ -14,8 +14,16 @@ type Test struct {
 	service.Service
 }
 
-func (e *Test) List(list *[]models.Test) error {
-	return e.Orm.Order("id asc").Find(list).Error
+// List 根据查询条件获取测试记录，名称为空时返回全部记录。
+func (e *Test) List(query *dto.TestListQuery, list *[]models.Test) error {
+	orm := e.Orm.Order("id asc")
+	if query != nil {
+		query.Normalize()
+		if query.Name != "" {
+			orm = orm.Where("name = ?", query.Name)
+		}
+	}
+	return orm.Find(list).Error
 }
 
 func (e *Test) Create(payload *dto.TestPayload, item *models.Test) error {
