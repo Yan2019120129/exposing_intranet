@@ -30,6 +30,7 @@ type Client struct {
 	GetKey      func() string
 	connMu      sync.RWMutex
 	conn        *toolsPenetrate.Conn
+	closed      bool
 	connOptions toolsPenetrate.ConnOptions
 	dataTimeout time.Duration
 }
@@ -73,9 +74,16 @@ func (c *Client) link() (*toolsPenetrate.Conn, error) {
 	c.connMu.Lock()
 	previous := c.conn
 	c.conn = control
+	closed := c.closed
 	c.connMu.Unlock()
 	if previous != nil && previous != control {
 		_ = previous.Close()
+	}
+	if closed {
+		// 在注册操作进行期间执行了关闭操作；关闭这个新建立的连接，
+		// 以免调用者的阻塞式控制读取操作因无法被唤醒而挂起。
+		_ = control.Close()
+		return nil, net.ErrClosed
 	}
 	return control, nil
 }
@@ -191,8 +199,12 @@ func (c *Client) Send(msg message.Message) error {
 	return conn.Send(msg)
 }
 
+// Close 会关闭当前的控制连接。关闭状态具有持久性：若连接在 Close 执行后才发布（即注册请求尚在处理中），该连接会被链路（link）立即关闭，从而避免产生“会话泄漏”——即那种因阻塞读操作永远无法被唤醒而导致的泄漏。
 func (c *Client) Close() error {
-	conn := c.currentConn()
+	c.connMu.Lock()
+	c.closed = true
+	conn := c.conn
+	c.connMu.Unlock()
 	if conn == nil {
 		return nil
 	}

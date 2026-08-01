@@ -177,6 +177,33 @@ func TestClientRegistersAndAnswersPing(t *testing.T) {
 	}
 }
 
+func TestClientCloseBeforeLinkStopsStart(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		if errors.Is(err, syscall.EPERM) {
+			t.Skipf("sandbox does not permit local listeners: %v", err)
+		}
+		t.Fatalf("listen: %v", err)
+	}
+	defer listener.Close()
+
+	client := NewClient(listener.Addr().String())
+	if err := client.Close(); err != nil {
+		t.Fatalf("close before link: %v", err)
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- client.Start() }()
+	select {
+	case startErr := <-done:
+		if !errors.Is(startErr, net.ErrClosed) {
+			t.Fatalf("Start() error = %v, want net.ErrClosed", startErr)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Start did not stop for a client closed before linking")
+	}
+}
+
 func TestClientStopsOnRegistrationRejection(t *testing.T) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
