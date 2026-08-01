@@ -124,12 +124,12 @@ func (e SystemFileShare) RevokeShare(ctx *gin.Context) {
 		e.handleShareFileError(err)
 		return
 	}
-	shareID, err := strconv.Atoi(ctx.Param("shareId"))
+	shareID, err := strconv.ParseUint(ctx.Param("shareId"), 10, strconv.IntSize)
 	if err != nil || shareID <= 0 {
 		e.Error(http.StatusBadRequest, errors.New("invalid share id"), "invalid share id")
 		return
 	}
-	if err := s.Revoke(&dto.SystemFileShareRevokeInput{FileID: fileID, ShareID: shareID}); err != nil {
+	if err := s.Revoke(&dto.SystemFileShareRevokeInput{FileID: fileID, ShareID: uint(shareID)}); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			e.Error(http.StatusNotFound, err, "share not found")
 			return
@@ -161,13 +161,13 @@ func (e SystemFileShare) ShareDownload(ctx *gin.Context) {
 }
 
 // parseFileID 解析请求路径中的文件标识。
-func (e SystemFileShare) parseFileID(ctx *gin.Context) (int, bool) {
-	id, err := strconv.Atoi(ctx.Param("id"))
+func (e SystemFileShare) parseFileID(ctx *gin.Context) (uint, bool) {
+	id, err := strconv.ParseUint(ctx.Param("id"), 10, strconv.IntSize)
 	if err != nil || id <= 0 {
 		e.Error(http.StatusBadRequest, errors.New("invalid id"), "invalid id")
 		return 0, false
 	}
-	return id, true
+	return uint(id), true
 }
 
 // shareUser 获取已通过文件管理权限校验的后台用户。
@@ -206,7 +206,7 @@ func (e SystemFileShare) shareItems(ctx *gin.Context, shares []models.SystemFile
 // shareItem 将单条分享记录转换为接口返回内容。
 func (e SystemFileShare) shareItem(ctx *gin.Context, share models.SystemFileShare) dto.SystemFileShareItem {
 	return dto.SystemFileShareItem{
-		Id:          share.Id,
+		Id:          share.ID,
 		DownloadURL: shareDownloadURL(ctx, share.Token),
 		ExpiresAt:   share.ExpiresAt,
 		RevokedAt:   share.RevokedAt,

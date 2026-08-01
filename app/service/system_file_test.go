@@ -34,17 +34,27 @@ func TestSystemFileGetDownloadFile(t *testing.T) {
 
 	fileService := SystemFile{Service: codeService.Service{Orm: db}}
 	item := models.SystemFile{}
-	if err := fileService.GetDownloadFile(&dto.SystemFileDownloadInput{FileID: file.Id}, &item); err != nil {
+	if err := fileService.GetDownloadFile(&dto.SystemFileDownloadInput{FileID: file.ID}, &item); err != nil {
 		t.Fatalf("查询正常文件失败: %v", err)
 	}
-	if item.Id != file.Id {
-		t.Fatalf("查询到错误文件，期望 %d，实际 %d", file.Id, item.Id)
+	if item.ID != file.ID {
+		t.Fatalf("查询到错误文件，期望 %d，实际 %d", file.ID, item.ID)
 	}
 
 	if err := db.Model(&file).Update("status", 0).Error; err != nil {
 		t.Fatalf("禁用测试文件失败: %v", err)
 	}
-	if err := fileService.GetDownloadFile(&dto.SystemFileDownloadInput{FileID: file.Id}, &models.SystemFile{}); !errors.Is(err, gorm.ErrRecordNotFound) {
+	if err := fileService.GetDownloadFile(&dto.SystemFileDownloadInput{FileID: file.ID}, &models.SystemFile{}); !errors.Is(err, gorm.ErrRecordNotFound) {
 		t.Fatalf("禁用文件不应可下载，实际错误: %v", err)
+	}
+
+	if err := db.Model(&file).Update("status", 1).Error; err != nil {
+		t.Fatalf("恢复测试文件状态失败: %v", err)
+	}
+	if err := db.Delete(&file).Error; err != nil {
+		t.Fatalf("软删除测试文件失败: %v", err)
+	}
+	if err := fileService.GetDownloadFile(&dto.SystemFileDownloadInput{FileID: file.ID}, &models.SystemFile{}); !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("已删除文件不应可下载，实际错误: %v", err)
 	}
 }

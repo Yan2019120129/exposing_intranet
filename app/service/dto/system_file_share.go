@@ -9,13 +9,13 @@ type SystemFileShareCreatePayload struct {
 
 // SystemFileShareManageFileInput 定义查询当前用户可管理系统文件的服务输入。
 type SystemFileShareManageFileInput struct {
-	FileID       int
+	FileID       uint
 	IsSuperAdmin bool
 }
 
 // SystemFileShareCreateInput 定义创建系统文件分享记录的服务输入。
 type SystemFileShareCreateInput struct {
-	FileID        int
+	FileID        uint
 	DurationHours int
 	CreatedBy     int64
 	IsSuperAdmin  bool
@@ -23,25 +23,25 @@ type SystemFileShareCreateInput struct {
 
 // SystemFileShareListInput 定义查询系统文件分享记录的服务输入。
 type SystemFileShareListInput struct {
-	FileID int
+	FileID uint
 }
 
 // SystemFileShareRevokeInput 定义撤销系统文件分享记录的服务输入。
 type SystemFileShareRevokeInput struct {
-	FileID  int
-	ShareID int
+	FileID  uint
+	ShareID uint
 }
 
 // SystemFileShareUpdateExpiresAtInput 定义修改分享链接到期时间的服务输入。
 type SystemFileShareUpdateExpiresAtInput struct {
-	ShareID      int
+	ShareID      uint
 	ExpiresAt    time.Time
 	IsSuperAdmin bool
 }
 
 // SystemFileShareRevokeByIDInput 定义按分享记录标识撤销的服务输入。
 type SystemFileShareRevokeByIDInput struct {
-	ShareID      int
+	ShareID      uint
 	IsSuperAdmin bool
 }
 
@@ -52,7 +52,7 @@ type SystemFileShareDownloadInput struct {
 
 // SystemFileShareItem 定义文件分享记录的接口返回内容。
 type SystemFileShareItem struct {
-	Id          int        `json:"id"`
+	Id          uint       `json:"id"`
 	DownloadURL string     `json:"downloadUrl"`
 	ExpiresAt   time.Time  `json:"expiresAt"`
 	RevokedAt   *time.Time `json:"revokedAt"`

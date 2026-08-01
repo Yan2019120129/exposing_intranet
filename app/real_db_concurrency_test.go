@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"my-base/app/models"
 	appRouter "my-base/app/router"
+	"my-base/app/tables"
+	"my-base/code"
 	"my-base/configs"
-	"my-base/tables"
 	"net/http"
 	"os"
 	"sync"
@@ -54,7 +55,7 @@ func TestTestRoutesRealDatabaseConcurrentIsolation(t *testing.T) {
 				t.Errorf("create worker %d business code=%d msg=%q data=%+v", i, resp.Code, resp.Msg, resp.Data)
 				return
 			}
-			if resp.Data.Id == 0 || resp.Data.Id == 100000+i || resp.Data.Name != name {
+			if resp.Data.Id == 0 || resp.Data.Id == uint(100000+i) || resp.Data.Name != name {
 				t.Errorf("unexpected concurrent create response for worker %d: %+v", i, resp.Data)
 				return
 			}
@@ -160,7 +161,7 @@ func newRealDatabaseTestRouter(t *testing.T) (*gin.Engine, *gorm.DB, func()) {
 	}
 
 	router.Use(func(c *gin.Context) {
-		c.Set("db", db)
+		c.Set(code.ContextDBKey, eng.DefaultConnection())
 	})
 	appRouter.InitRouter(router)
 

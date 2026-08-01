@@ -36,7 +36,7 @@ func TestSystemFileShareCreateDownloadAndRevoke(t *testing.T) {
 
 	fileShare := SystemFileShare{Service: codeService.Service{Orm: db}}
 	share, err := fileShare.Create(&dto.SystemFileShareCreateInput{
-		FileID:        file.Id,
+		FileID:        file.ID,
 		DurationHours: systemFileShareOneDayHours,
 		CreatedBy:     7,
 		IsSuperAdmin:  false,
@@ -44,7 +44,7 @@ func TestSystemFileShareCreateDownloadAndRevoke(t *testing.T) {
 	if err != nil {
 		t.Fatalf("创建分享失败: %v", err)
 	}
-	if share.Token == "" || share.SystemFileID != file.Id || share.CreatedBy != 7 {
+	if share.Token == "" || share.SystemFileID != file.ID || share.CreatedBy != 7 {
 		t.Fatalf("分享记录不正确: %+v", share)
 	}
 
@@ -52,18 +52,18 @@ func TestSystemFileShareCreateDownloadAndRevoke(t *testing.T) {
 	if err := fileShare.GetDownloadFile(&dto.SystemFileShareDownloadInput{Token: share.Token}, &downloadFile); err != nil {
 		t.Fatalf("通过分享令牌获取文件失败: %v", err)
 	}
-	if downloadFile.Id != file.Id {
-		t.Fatalf("分享令牌返回错误文件，期望 %d，实际 %d", file.Id, downloadFile.Id)
+	if downloadFile.ID != file.ID {
+		t.Fatalf("分享令牌返回错误文件，期望 %d，实际 %d", file.ID, downloadFile.ID)
 	}
 
 	if err := fileShare.UpdateExpiresAt(&dto.SystemFileShareUpdateExpiresAtInput{
-		ShareID:      share.Id,
+		ShareID:      share.ID,
 		ExpiresAt:    time.Now().Add(48 * time.Hour),
 		IsSuperAdmin: false,
 	}); err != nil {
 		t.Fatalf("更新分享到期时间失败: %v", err)
 	}
-	if err := fileShare.Revoke(&dto.SystemFileShareRevokeInput{FileID: file.Id, ShareID: share.Id}); err != nil {
+	if err := fileShare.Revoke(&dto.SystemFileShareRevokeInput{FileID: file.ID, ShareID: share.ID}); err != nil {
 		t.Fatalf("撤销分享失败: %v", err)
 	}
 	if err := fileShare.GetDownloadFile(&dto.SystemFileShareDownloadInput{Token: share.Token}, &models.SystemFile{}); !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -83,8 +83,8 @@ func TestSystemFileShareRejectsDeletedFile(t *testing.T) {
 
 	deletedAt := time.Now()
 	file := models.SystemFile{
-		BaseModel: models.BaseModel{
-			DeletedAt: &deletedAt,
+		Model: gorm.Model{
+			DeletedAt: gorm.DeletedAt{Time: deletedAt, Valid: true},
 		},
 		OriginalName: "deleted.txt",
 		FileName:     "deleted.txt",
@@ -98,7 +98,7 @@ func TestSystemFileShareRejectsDeletedFile(t *testing.T) {
 
 	fileShare := SystemFileShare{Service: codeService.Service{Orm: db}}
 	_, err = fileShare.Create(&dto.SystemFileShareCreateInput{
-		FileID:        file.Id,
+		FileID:        file.ID,
 		DurationHours: systemFileShareOneDayHours,
 		CreatedBy:     7,
 		IsSuperAdmin:  true,

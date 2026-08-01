@@ -32,14 +32,14 @@ func (e SystemFile) Download(ctx *gin.Context) {
 		return
 	}
 
-	id, err := strconv.Atoi(ctx.Param("id"))
+	id, err := strconv.ParseUint(ctx.Param("id"), 10, strconv.IntSize)
 	if err != nil || id <= 0 {
 		e.Error(http.StatusBadRequest, errors.New("invalid id"), "invalid id")
 		return
 	}
 
 	item := models.SystemFile{}
-	if err := s.GetDownloadFile(&dto.SystemFileDownloadInput{FileID: id}, &item); err != nil {
+	if err := s.GetDownloadFile(&dto.SystemFileDownloadInput{FileID: uint(id)}, &item); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			e.Error(http.StatusNotFound, err, "file not found")
 			return

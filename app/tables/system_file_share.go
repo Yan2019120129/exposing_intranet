@@ -70,7 +70,7 @@ func GetSystemFileShareTable(ctx *context.Context) table.Table {
 			return revokeSystemFileSharesByDB(gormDB, ids, user.IsSuperAdmin())
 		})
 	info.SetFooterHtml(systemFileShareCopyScript())
-	info.WhereRaw("system_file_id IN (SELECT id FROM system_files WHERE status = 1" + systemFileShareVisibilityCondition(user.IsSuperAdmin()) + ")")
+	info.WhereRaw("system_file_id IN (SELECT id FROM system_files WHERE status = 1 AND deleted_at IS NULL" + systemFileShareVisibilityCondition(user.IsSuperAdmin()) + ")")
 
 	formList := config.GetForm()
 	formList.AddField("ID", "id", db.Bigint, form.Default).FieldDisableWhenCreate()
@@ -107,10 +107,13 @@ func systemFileShareFileOptionsQuery(isSuperAdmin bool) types.OptionTableQueryPr
 // insertSystemFileShareByDB 按选定时长创建新的分享记录。
 func insertSystemFileShareByDB(gormDB *gorm.DB, values form1.Values, createdBy int64, isSuperAdmin bool) error {
 	fileID := values.GetIntDefault("system_file_id", 0)
+	if fileID <= 0 {
+		return errors.New("系统文件标识无效")
+	}
 	durationHours := values.GetIntDefault("duration_hours", 0)
 	fileShare := newSystemFileShareService(gormDB)
 	_, err := fileShare.Create(&dto.SystemFileShareCreateInput{
-		FileID:        fileID,
+		FileID:        uint(fileID),
 		DurationHours: durationHours,
 		CreatedBy:     createdBy,
 		IsSuperAdmin:  isSuperAdmin,
@@ -121,13 +124,16 @@ func insertSystemFileShareByDB(gormDB *gorm.DB, values form1.Values, createdBy i
 // updateSystemFileShareByDB 修改未撤销分享记录的到期时间。
 func updateSystemFileShareByDB(gormDB *gorm.DB, values form1.Values, isSuperAdmin bool) error {
 	shareID := values.GetIntDefault("id", 0)
+	if shareID <= 0 {
+		return errors.New("分享记录标识无效")
+	}
 	expiresAt, err := parseSystemFileShareTime(values.Get("expires_at"))
 	if err != nil {
 		return err
 	}
 	fileShare := newSystemFileShareService(gormDB)
 	return fileShare.UpdateExpiresAt(&dto.SystemFileShareUpdateExpiresAtInput{
-		ShareID:      shareID,
+		ShareID:      uint(shareID),
 		ExpiresAt:    expiresAt,
 		IsSuperAdmin: isSuperAdmin,
 	})
@@ -146,7 +152,7 @@ func revokeSystemFileSharesByDB(gormDB *gorm.DB, ids []string, isSuperAdmin bool
 				return errors.New("分享记录标识无效")
 			}
 			if err := fileShare.RevokeByID(&dto.SystemFileShareRevokeByIDInput{
-				ShareID:      shareID,
+				ShareID:      uint(shareID),
 				IsSuperAdmin: isSuperAdmin,
 			}); err != nil {
 				return err

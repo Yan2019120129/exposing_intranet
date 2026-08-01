@@ -1,8 +1,6 @@
 package models
 
 import (
-	"time"
-
 	"gorm.io/gorm"
 )
 
@@ -11,13 +9,6 @@ var (
 		table: make(map[string]*modelInfo),
 	}
 )
-
-type BaseModel struct {
-	Id        int        `json:"id" gorm:"primarykey; comment:主键;"`
-	CreatedAt time.Time  `json:"createdAt" gorm:"comment:创建时间"`
-	UpdatedAt time.Time  `json:"updatedAt" gorm:"comment:修改时间"`
-	DeletedAt *time.Time `json:"deletedAt" gorm:"comment:删除时间" sql:"index"`
-}
 
 type modelInfo struct {
 	name    string // 表名
