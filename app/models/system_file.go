@@ -1,11 +1,13 @@
 package models
 
+import "gorm.io/gorm"
+
 func init() {
 	ModelManage.SetModel("system_files", &SystemFile{}, "系统文件")
 }
 
 type SystemFile struct {
-	BaseModel
+	gorm.Model
 	OriginalName  string `gorm:"type:varchar(255);not null;comment:原始文件名" json:"originalName"`
 	FileName      string `gorm:"type:varchar(255);not null;comment:存储文件名" json:"fileName"`
 	FileExt       string `gorm:"type:varchar(32);not null;default:'';comment:扩展名" json:"fileExt"`

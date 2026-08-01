@@ -7,7 +7,7 @@ func Diff[T comparable](a, b []T) []T {
 		set[v] = struct{}{}
 	}
 
-	var diff []T
+	diff := make([]T, 0)
 	for _, v := range a {
 		if _, ok := set[v]; !ok {
 			diff = append(diff, v)
@@ -23,7 +23,7 @@ func Intersect[T comparable](a, b []T) []T {
 		set[v] = struct{}{}
 	}
 
-	var res []T
+	res := make([]T, 0)
 	for _, v := range a {
 		if _, ok := set[v]; ok {
 			res = append(res, v)
@@ -35,7 +35,7 @@ func Intersect[T comparable](a, b []T) []T {
 // 并集 A ∪ B（去重）
 func Union[T comparable](a, b []T) []T {
 	set := make(map[T]struct{}, len(a)+len(b))
-	var res []T
+	res := make([]T, 0)
 
 	for _, v := range a {
 		if _, ok := set[v]; !ok {

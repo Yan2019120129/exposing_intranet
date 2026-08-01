@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"my-base/app/models"
 	appRouter "my-base/app/router"
+	"my-base/code"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	adminConfig "github.com/GoAdminGroup/go-admin/modules/config"
 	adminDB "github.com/GoAdminGroup/go-admin/modules/db"
@@ -95,6 +97,22 @@ func TestTestRoutesDoNotPolluteData(t *testing.T) {
 	if count != 1 {
 		t.Fatalf("expected database to contain exactly one record, got %d", count)
 	}
+
+	var total int64
+	if err := db.Unscoped().Model(&models.Test{}).Count(&total).Error; err != nil {
+		t.Fatalf("count records including soft-deleted rows: %v", err)
+	}
+	if total != 2 {
+		t.Fatalf("expected two physical records after soft delete, got %d", total)
+	}
+
+	deleted := models.Test{}
+	if err := db.Unscoped().First(&deleted, createdA.Data.Id).Error; err != nil {
+		t.Fatalf("load soft-deleted record: %v", err)
+	}
+	if !deleted.DeletedAt.Valid {
+		t.Fatal("expected deleted record to have a deletion timestamp")
+	}
 }
 
 func newIsolatedTestRouter(t *testing.T) (*gin.Engine, *gorm.DB) {
@@ -102,30 +120,27 @@ func newIsolatedTestRouter(t *testing.T) (*gin.Engine, *gorm.DB) {
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	router.LoadHTMLGlob("../website/html/*")
+	router.LoadHTMLGlob("../html/*")
 
-	dsn := "file:" + url.QueryEscape(t.Name()) + "?mode=memory&cache=shared"
-	conn := adminDB.GetConnectionByDriver(adminDB.DriverSqlite).InitDB(map[string]adminConfig.Database{
-		"default": {
-			Driver:       adminConfig.DriverSqlite,
-			Dsn:          dsn,
-			MaxIdleConns: 1,
-			MaxOpenConns: 1,
+	connection := adminDB.GetSqliteDB().InitDB(map[string]adminConfig.Database{
+		code.DefaultGoAdminConnectionName: {
+			Driver: adminDB.DriverSqlite,
+			File:   filepath.Join(t.TempDir(), "test.db"),
 		},
 	})
-	db, err := conn.GetGorm("default")
+	t.Cleanup(func() { _ = connection.Close() })
+
+	db, err := connection.GetGorm(code.DefaultGoAdminConnectionName)
 	if err != nil {
-		conn.Close()
-		t.Fatalf("open isolated sqlite database: %v", err)
+		t.Fatalf("get isolated sqlite database: %v", err)
 	}
-	t.Cleanup(func() { conn.Close() })
 
 	if err := db.AutoMigrate(&models.Test{}); err != nil {
 		t.Fatalf("migrate isolated test table: %v", err)
 	}
 
 	router.Use(func(c *gin.Context) {
-		c.Set("db", conn)
+		c.Set(code.ContextDBKey, connection)
 	})
 	appRouter.InitRouter(router)
 	return router, db
@@ -138,8 +153,11 @@ type apiResponse[T any] struct {
 }
 
 type testDTO struct {
-	Id   int    `json:"id"`
-	Name string `json:"name"`
+	Id        uint       `json:"id"`
+	CreatedAt time.Time  `json:"createdAt"`
+	UpdatedAt time.Time  `json:"updatedAt"`
+	DeletedAt *time.Time `json:"deletedAt"`
+	Name      string     `json:"name"`
 }
 
 func requestJSON[T any](t *testing.T, router *gin.Engine, method, path, body string, status int) T {
@@ -154,6 +172,12 @@ func requestJSON[T any](t *testing.T, router *gin.Engine, method, path, body str
 	if err := json.Unmarshal(recorder.Body.Bytes(), &result); err != nil {
 		t.Fatalf("decode %s %s response: %v", method, path, err)
 	}
+	if _, ok := any(result).(apiResponse[testDTO]); ok {
+		responseBody := recorder.Body.String()
+		if !strings.Contains(responseBody, `"id":`) || strings.Contains(responseBody, `"ID":`) {
+			t.Fatalf("test response must preserve lower-camel JSON fields, got %q", responseBody)
+		}
+	}
 	return result
 }
 
@@ -167,6 +191,6 @@ func performRequest(router *gin.Engine, method, path, body string) *httptest.Res
 	return recorder
 }
 
-func itoa(v int) string {
-	return strconv.Itoa(v)
+func itoa(v uint) string {
+	return strconv.FormatUint(uint64(v), 10)
 }

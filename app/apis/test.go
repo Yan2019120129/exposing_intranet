@@ -48,7 +48,7 @@ func (e Test) List(ctx *gin.Context) {
 		e.Error(http.StatusInternalServerError, err, err.Error())
 		return
 	}
-	e.OK(items, "查询成功")
+	e.OK(dto.NewTestItems(items), "查询成功")
 }
 
 func (e Test) Create(ctx *gin.Context) {
@@ -70,7 +70,7 @@ func (e Test) Create(ctx *gin.Context) {
 		e.Error(500, err, err.Error())
 		return
 	}
-	e.OK(item, "创建成功")
+	e.OK(dto.NewTestItem(item), "创建成功")
 }
 
 func (e Test) Get(ctx *gin.Context) {
@@ -95,7 +95,7 @@ func (e Test) Get(ctx *gin.Context) {
 		e.Error(500, err, err.Error())
 		return
 	}
-	e.OK(item, "查询成功")
+	e.OK(dto.NewTestItem(item), "查询成功")
 }
 
 func (e Test) Update(ctx *gin.Context) {
@@ -126,7 +126,7 @@ func (e Test) Update(ctx *gin.Context) {
 		e.Error(500, err, err.Error())
 		return
 	}
-	e.OK(item, "修改成功")
+	e.OK(dto.NewTestItem(item), "修改成功")
 }
 
 func (e Test) Delete(ctx *gin.Context) {
@@ -153,11 +153,12 @@ func (e Test) Delete(ctx *gin.Context) {
 	e.OK(nil, "删除成功")
 }
 
-func (e Test) parseID(ctx *gin.Context) (int, bool) {
-	id, err := strconv.Atoi(ctx.Param("id"))
+// parseID 解析路径中的无符号测试记录标识。
+func (e Test) parseID(ctx *gin.Context) (uint, bool) {
+	id, err := strconv.ParseUint(ctx.Param("id"), 10, strconv.IntSize)
 	if err != nil || id <= 0 {
 		e.Error(http.StatusBadRequest, errors.New("invalid id"), "invalid id")
 		return 0, false
 	}
-	return id, true
+	return uint(id), true
 }
