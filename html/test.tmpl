@@ -1,0 +1,182 @@
+<div class="test-page">
+    <section class="panel">
+        <header>
+            <h1>Test CRUD</h1>
+            <button type="button" id="refresh">Refresh</button>
+        </header>
+        <form id="test-form">
+            <input type="hidden" id="test-id">
+            <label for="test-name">Name</label>
+            <input id="test-name" name="name" type="text" maxlength="50" required autocomplete="off">
+            <button type="submit" id="save">Create</button>
+            <button type="button" id="cancel" hidden>Cancel</button>
+        </form>
+        <p id="status" role="status"></p>
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="test-list"></tbody>
+        </table>
+    </section>
+</div>
+
+<script>
+(function () {
+    const form = document.getElementById('test-form');
+    const idInput = document.getElementById('test-id');
+    const nameInput = document.getElementById('test-name');
+    const saveButton = document.getElementById('save');
+    const cancelButton = document.getElementById('cancel');
+    const status = document.getElementById('status');
+    const list = document.getElementById('test-list');
+
+    function setStatus(message) {
+        status.textContent = message || '';
+    }
+
+    function resetForm() {
+        idInput.value = '';
+        nameInput.value = '';
+        saveButton.textContent = 'Create';
+        cancelButton.hidden = true;
+        nameInput.focus();
+    }
+
+    function render(items) {
+        list.innerHTML = '';
+        items.forEach(function (item) {
+            const row = document.createElement('tr');
+            row.innerHTML = '<td>' + item.id + '</td><td>' + item.name + '</td><td><button type="button" data-edit="' + item.id + '">Edit</button> <button type="button" data-delete="' + item.id + '">Delete</button></td>';
+            row.querySelector('[data-edit]').addEventListener('click', function () {
+                idInput.value = item.id;
+                nameInput.value = item.name;
+                saveButton.textContent = 'Update';
+                cancelButton.hidden = false;
+                nameInput.focus();
+            });
+            row.querySelector('[data-delete]').addEventListener('click', function () {
+                remove(item.id);
+            });
+            list.appendChild(row);
+        });
+    }
+
+    async function refresh() {
+        const response = await fetch('/tests');
+        const body = await response.json();
+        render(body.data || []);
+    }
+
+    async function save(event) {
+        event.preventDefault();
+        const id = idInput.value;
+        const response = await fetch(id ? '/tests/' + id : '/tests', {
+            method: id ? 'PUT' : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: nameInput.value })
+        });
+        if (!response.ok) {
+            const body = await response.json();
+            setStatus(body.error || 'Save failed');
+            return;
+        }
+        resetForm();
+        setStatus(id ? 'Updated' : 'Created');
+        await refresh();
+    }
+
+    async function remove(id) {
+        const response = await fetch('/tests/' + id, { method: 'DELETE' });
+        if (!response.ok) {
+            setStatus('Delete failed');
+            return;
+        }
+        setStatus('Deleted');
+        await refresh();
+    }
+
+    form.addEventListener('submit', save);
+    cancelButton.addEventListener('click', resetForm);
+    document.getElementById('refresh').addEventListener('click', refresh);
+    refresh();
+}());
+</script>
+
+<style>
+    .test-page {
+        min-height: 100vh;
+        padding: 32px;
+        background: #f6f7fb;
+        color: #1f2937;
+        font-family: Arial, sans-serif;
+    }
+    .panel {
+        max-width: 760px;
+        margin: 0 auto;
+        background: #fff;
+        border: 1px solid #d8dde8;
+        border-radius: 8px;
+        padding: 20px;
+    }
+    header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        margin-bottom: 16px;
+    }
+    h1 {
+        margin: 0;
+        font-size: 22px;
+    }
+    form {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto auto;
+        gap: 8px;
+        align-items: center;
+        margin-bottom: 12px;
+    }
+    input {
+        min-width: 0;
+        height: 34px;
+        padding: 0 10px;
+        border: 1px solid #bcc5d4;
+        border-radius: 6px;
+    }
+    button {
+        min-height: 34px;
+        padding: 0 12px;
+        border: 1px solid #8b95a7;
+        border-radius: 6px;
+        background: #fff;
+        cursor: pointer;
+    }
+    #status {
+        min-height: 20px;
+        margin: 0 0 12px;
+        color: #2563eb;
+    }
+    table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    th, td {
+        padding: 10px;
+        border-top: 1px solid #e5e7eb;
+        text-align: left;
+    }
+    @media (max-width: 640px) {
+        form {
+            grid-template-columns: 1fr;
+        }
+        header {
+            align-items: flex-start;
+            flex-direction: column;
+        }
+    }
+</style>

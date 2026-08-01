@@ -73,11 +73,11 @@ func TestPortRepositoryRejectsConcurrentDuplicateServer(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := 1; i <= 2; i++ {
 		wg.Add(1)
-		go func(clientID int) {
+		go func(clientID uint) {
 			defer wg.Done()
 			<-start
 			errs <- repo.Create(&models.Port{ClientId: clientID, Server: ":18080", Local: ":8080"})
-		}(i)
+		}(uint(i))
 	}
 	close(start)
 	wg.Wait()
@@ -109,6 +109,26 @@ func TestPortRepositoryRejectsDuplicateClientLocal(t *testing.T) {
 	err := repo.Create(&models.Port{ClientId: 7, Server: ":18082", Local: ":8081"})
 	if !errors.Is(err, repository.ErrDuplicateKey) {
 		t.Fatalf("duplicate client/local error = %v, want ErrDuplicateKey", err)
+	}
+}
+
+func TestPortRepositoryHardDeletesMapping(t *testing.T) {
+	db := openPortServiceDB(t)
+	repo := repository.NewPortRepository(db)
+	port := &models.Port{ClientId: 7, Server: ":18084", Local: ":8084"}
+	if err := repo.Create(port); err != nil {
+		t.Fatalf("创建端口映射失败: %v", err)
+	}
+	if err := repo.DeleteByID(port.ID); err != nil {
+		t.Fatalf("删除端口映射失败: %v", err)
+	}
+	if err := repo.Create(&models.Port{ClientId: 7, Server: ":18084", Local: ":8084"}); err != nil {
+		t.Fatalf("删除后重新创建端口映射失败: %v", err)
+	}
+
+	var deleted models.Port
+	if err := db.Unscoped().First(&deleted, port.ID).Error; !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("端口映射未被物理删除，错误: %v", err)
 	}
 }
 

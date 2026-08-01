@@ -84,12 +84,13 @@ func (r *ClientRepository) NameOptions() ([]ClientNameOption, error) {
 	return items, err
 }
 
+// DeleteByIDs 删除客户端及其关联的端口映射。
 func (r *ClientRepository) DeleteByIDs(ids []int) error {
 	if r.DB == nil {
 		return gorm.ErrInvalidDB
 	}
 	return r.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("client_id IN ?", ids).Delete(&models.Port{}).Error; err != nil {
+		if err := tx.Unscoped().Where("client_id IN ?", ids).Delete(&models.Port{}).Error; err != nil {
 			return err
 		}
 		return tx.Where("id IN ?", ids).Delete(&models.Client{}).Error

@@ -1,5 +1,7 @@
 package models
 
+import "gorm.io/gorm"
+
 const (
 	StatusOn            = -1   // 断开
 	StatusActive        = iota // 活跃
@@ -17,7 +19,7 @@ func init() {
 
 // Client 客户端模型
 type Client struct {
-	BaseModel
+	gorm.Model
 	Name   string `json:"name" gorm:"type:varchar(128) not null; comment:客户端名称"`                // 客户端名
 	Symbol string `json:"symbol" gorm:"type:varchar(256) not null; unique; comment:客户端标识"`      // 客户端标识
 	Status int    `json:"status" gorm:"type:tinyint not null; comment:状态 -1断开 1活跃 2禁用，3为历史兼容值"` // 状态 -1断开 1活跃 2禁用，3为历史兼容值

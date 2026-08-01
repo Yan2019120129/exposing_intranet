@@ -17,11 +17,11 @@ type PortRepository struct {
 }
 
 type PortWithClient struct {
-	ID         int
+	ID         uint
 	Server     string
 	Local      string
 	Comment    string
-	ClientID   int
+	ClientID   uint
 	ClientName string
 	Symbol     string
 }
@@ -39,7 +39,7 @@ func (r *PortRepository) CountServer(server string) (int64, error) {
 	return count, err
 }
 
-func (r *PortRepository) CountClientConflict(clientID int, server, local string) (int64, error) {
+func (r *PortRepository) CountClientConflict(clientID uint, server, local string) (int64, error) {
 	if r.DB == nil {
 		return 0, gorm.ErrInvalidDB
 	}
@@ -66,21 +66,23 @@ func (r *PortRepository) Create(port *models.Port) error {
 	return err
 }
 
-func (r *PortRepository) DeleteByID(id int) error {
+// DeleteByID 物理删除单个端口映射，确保端口可以再次创建。
+func (r *PortRepository) DeleteByID(id uint) error {
 	if r.DB == nil {
 		return gorm.ErrInvalidDB
 	}
-	return r.DB.Delete(&models.Port{}, id).Error
+	return r.DB.Unscoped().Delete(&models.Port{}, id).Error
 }
 
+// DeleteByIDs 物理删除多个端口映射，确保端口可以再次创建。
 func (r *PortRepository) DeleteByIDs(ids []string) error {
 	if r.DB == nil {
 		return gorm.ErrInvalidDB
 	}
-	return r.DB.Where("id IN ?", ids).Delete(&models.Port{}).Error
+	return r.DB.Unscoped().Where("id IN ?", ids).Delete(&models.Port{}).Error
 }
 
-func (r *PortRepository) FindByClientID(clientID int) ([]models.Port, error) {
+func (r *PortRepository) FindByClientID(clientID uint) ([]models.Port, error) {
 	items := make([]models.Port, 0)
 	if r.DB == nil {
 		return items, gorm.ErrInvalidDB
@@ -89,7 +91,7 @@ func (r *PortRepository) FindByClientID(clientID int) ([]models.Port, error) {
 	return items, err
 }
 
-func (r *PortRepository) FindByClientAndServer(clientID int, server string) (models.Port, error) {
+func (r *PortRepository) FindByClientAndServer(clientID uint, server string) (models.Port, error) {
 	var item models.Port
 	if r.DB == nil {
 		return item, gorm.ErrInvalidDB

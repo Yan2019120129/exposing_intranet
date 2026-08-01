@@ -90,12 +90,12 @@ func TestClientDeleteCommitsDatabaseBeforeRuntimeCleanup(t *testing.T) {
 	if err := db.Create(&client).Error; err != nil {
 		t.Fatalf("create client: %v", err)
 	}
-	if err := db.Create(&models.Port{ClientId: client.Id, Server: ":18090", Local: ":8090"}).Error; err != nil {
+	if err := db.Create(&models.Port{ClientId: client.ID, Server: ":18090", Local: ":8090"}).Error; err != nil {
 		t.Fatalf("create port: %v", err)
 	}
 
 	runtime := &observingDeleteRuntime{db: db}
-	if err := NewClientService(db, runtime).DeleteByIDs([]int{client.Id}); err != nil {
+	if err := NewClientService(db, runtime).DeleteByIDs([]int{int(client.ID)}); err != nil {
 		t.Fatalf("delete client: %v", err)
 	}
 	if len(runtime.symbols) != 1 || runtime.symbols[0] != client.Symbol {

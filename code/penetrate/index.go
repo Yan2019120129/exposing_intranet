@@ -277,7 +277,7 @@ func (s *Server) Register(param message.Message, conn *transport.Conn) {
 	}()
 	// 获取客户端信息
 	// 更新客户端状态为活跃
-	if clientInfo.Id > 0 {
+	if clientInfo.ID > 0 {
 		// 更新客户端名称（如果提供了新的名称）
 		if param.Name != "" {
 			_ = clientRepository.UpdateBySymbol(param.Symbol, &models.Client{Name: param.Name, Status: models.StatusActive})

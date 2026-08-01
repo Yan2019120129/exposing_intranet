@@ -70,13 +70,13 @@ func (s *PortService) Manage(command PortCommand) (PortResult, error) {
 
 	switch command.Action {
 	case "add":
-		mapping, err := s.create(client.Id, command.ServerPort, command.LocalAddr, command.Comment, command.Symbol)
+		mapping, err := s.create(client.ID, command.ServerPort, command.LocalAddr, command.Comment, command.Symbol)
 		if err != nil {
 			return PortResult{}, err
 		}
 		return PortResult{Mappings: []PortMapping{mapping}}, nil
 	case "del":
-		mapping, err := s.delete(client.Id, command.ServerPort, command.Symbol)
+		mapping, err := s.delete(client.ID, command.ServerPort, command.Symbol)
 		if err != nil {
 			return PortResult{}, err
 		}
@@ -88,8 +88,7 @@ func (s *PortService) Manage(command PortCommand) (PortResult, error) {
 	}
 }
 
-// CreateFromAdmin creates a mapping from a GoAdmin form while keeping all
-// validation, bind and persistence behavior in the service layer.
+// CreateFromAdmin 从 GoAdmin 表单创建映射，并统一由服务层完成校验和持久化。
 func (s *PortService) CreateFromAdmin(clientID int, serverPort, localAddr, comment string) error {
 	client, err := s.ClientRepository.FindByIDs([]int{clientID})
 	if err != nil {
@@ -98,7 +97,7 @@ func (s *PortService) CreateFromAdmin(clientID int, serverPort, localAddr, comme
 	if len(client) == 0 {
 		return ErrClientNotFound
 	}
-	_, err = s.create(clientID, serverPort, localAddr, comment, client[0].Symbol)
+	_, err = s.create(client[0].ID, serverPort, localAddr, comment, client[0].Symbol)
 	return err
 }
 
@@ -117,7 +116,7 @@ func (s *PortService) DeleteByIDs(ids []string) error {
 	return s.Repository.DeleteByIDs(ids)
 }
 
-func (s *PortService) create(clientID int, serverPort, localAddr, comment, symbol string) (PortMapping, error) {
+func (s *PortService) create(clientID uint, serverPort, localAddr, comment, symbol string) (PortMapping, error) {
 	serverPort, err := normalizeServerPort(serverPort)
 	if err != nil {
 		return PortMapping{}, err
@@ -162,7 +161,7 @@ func (s *PortService) create(clientID int, serverPort, localAddr, comment, symbo
 	return PortMapping{ServerPort: serverPort, LocalAddr: localAddr, Comment: comment, Status: "active"}, nil
 }
 
-func (s *PortService) delete(clientID int, serverPort, symbol string) (PortMapping, error) {
+func (s *PortService) delete(clientID uint, serverPort, symbol string) (PortMapping, error) {
 	serverPort, err := normalizeServerPort(serverPort)
 	if err != nil {
 		return PortMapping{}, err
@@ -179,7 +178,7 @@ func (s *PortService) delete(clientID int, serverPort, symbol string) (PortMappi
 			return PortMapping{}, err
 		}
 	}
-	if err := s.Repository.DeleteByID(port.Id); err != nil {
+	if err := s.Repository.DeleteByID(port.ID); err != nil {
 		return PortMapping{}, err
 	}
 	return PortMapping{ServerPort: serverPort, LocalAddr: port.Local, Comment: port.Comment, Status: "offline"}, nil
