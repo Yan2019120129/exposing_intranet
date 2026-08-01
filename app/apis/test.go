@@ -25,6 +25,7 @@ func (e Test) Page(ctx *gin.Context) {
 	ctx.HTML(http.StatusOK, "test.tmpl", nil)
 }
 
+// List 根据查询条件获取测试记录列表。
 func (e Test) List(ctx *gin.Context) {
 	s := service.Test{}
 	err := e.MakeContext(ctx).
@@ -38,7 +39,12 @@ func (e Test) List(ctx *gin.Context) {
 	}
 
 	items := make([]models.Test, 0)
-	if err = s.List(&items); err != nil {
+	query := dto.TestListQuery{}
+	if err = ctx.ShouldBindQuery(&query); err != nil {
+		e.Error(http.StatusBadRequest, err, "invalid query parameters")
+		return
+	}
+	if err = s.List(&query, &items); err != nil {
 		e.Error(http.StatusInternalServerError, err, err.Error())
 		return
 	}

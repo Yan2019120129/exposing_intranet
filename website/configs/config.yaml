@@ -102,6 +102,8 @@ admin:
     level: 0
 
     # 应用ID
+  # gorm 日志
+  sql_log: true
   app_id: "a2vRWpBRr0h1"
   # 界面语言
   language: "zh"

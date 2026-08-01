@@ -11,19 +11,23 @@ import (
 	"strings"
 
 	"my-base/app/models"
+	"my-base/app/service"
+	"my-base/app/service/dto"
 	"my-base/code/api"
-	"my-base/configs"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
-type File struct {
+// SystemFile 提供系统文件下载接口。
+type SystemFile struct {
 	api.Api
 }
 
-func (e File) Download(ctx *gin.Context) {
-	if err := e.MakeContext(ctx).MakeOrm().Errors; err != nil {
+// Download 下载指定的正常系统文件。
+func (e SystemFile) Download(ctx *gin.Context) {
+	s := service.SystemFile{}
+	if err := e.MakeContext(ctx).MakeOrm().MakeService(&s.Service).Errors; err != nil {
 		e.Error(http.StatusInternalServerError, err, err.Error())
 		return
 	}
@@ -35,7 +39,7 @@ func (e File) Download(ctx *gin.Context) {
 	}
 
 	item := models.SystemFile{}
-	if err := e.Orm.Where("id = ? AND status = ?", id, 1).First(&item).Error; err != nil {
+	if err := s.GetDownloadFile(&dto.SystemFileDownloadInput{FileID: id}, &item); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			e.Error(http.StatusNotFound, err, "file not found")
 			return
@@ -44,7 +48,13 @@ func (e File) Download(ctx *gin.Context) {
 		return
 	}
 
-	absPath, err := localSystemFilePath(item.StoragePath)
+	e.serveDownload(ctx, &item)
+}
+
+// serveDownload 校验本地文件并写入下载响应。
+func (e SystemFile) serveDownload(ctx *gin.Context, item *models.SystemFile) {
+	fileService := service.SystemFile{}
+	absPath, err := fileService.ResolveStoragePath(item.StoragePath)
 	if err != nil {
 		e.Error(http.StatusBadRequest, err, err.Error())
 		return
@@ -73,23 +83,6 @@ func (e File) Download(ctx *gin.Context) {
 	ctx.Header("Content-Type", contentType)
 	ctx.Header("Content-Disposition", contentDisposition(filename))
 	ctx.File(absPath)
-}
-
-func localSystemFilePath(storagePath string) (string, error) {
-	storagePath = strings.TrimSpace(strings.ReplaceAll(storagePath, "\\", "/"))
-	if storagePath == "" {
-		return "", errors.New("empty storage path")
-	}
-	storagePath = strings.TrimPrefix(storagePath, "/")
-	prefix := strings.Trim(configs.GetAdmin().Store.Prefix, "/")
-	if prefix != "" && strings.HasPrefix(storagePath, prefix+"/") {
-		storagePath = strings.TrimPrefix(storagePath, prefix+"/")
-	}
-	cleaned := filepath.Clean(filepath.FromSlash(storagePath))
-	if cleaned == "." || strings.HasPrefix(cleaned, ".."+string(os.PathSeparator)) || filepath.IsAbs(cleaned) {
-		return "", errors.New("invalid storage path")
-	}
-	return filepath.Join(configs.GetAdmin().Store.Path, cleaned), nil
 }
 
 func contentDisposition(filename string) string {

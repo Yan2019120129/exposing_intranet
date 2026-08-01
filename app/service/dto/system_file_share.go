@@ -1,0 +1,61 @@
+package dto
+
+import "time"
+
+// SystemFileShareCreatePayload 定义创建文件分享链接的 HTTP 请求体。
+type SystemFileShareCreatePayload struct {
+	DurationHours int `json:"durationHours"`
+}
+
+// SystemFileShareManageFileInput 定义查询当前用户可管理系统文件的服务输入。
+type SystemFileShareManageFileInput struct {
+	FileID       int
+	IsSuperAdmin bool
+}
+
+// SystemFileShareCreateInput 定义创建系统文件分享记录的服务输入。
+type SystemFileShareCreateInput struct {
+	FileID        int
+	DurationHours int
+	CreatedBy     int64
+	IsSuperAdmin  bool
+}
+
+// SystemFileShareListInput 定义查询系统文件分享记录的服务输入。
+type SystemFileShareListInput struct {
+	FileID int
+}
+
+// SystemFileShareRevokeInput 定义撤销系统文件分享记录的服务输入。
+type SystemFileShareRevokeInput struct {
+	FileID  int
+	ShareID int
+}
+
+// SystemFileShareUpdateExpiresAtInput 定义修改分享链接到期时间的服务输入。
+type SystemFileShareUpdateExpiresAtInput struct {
+	ShareID      int
+	ExpiresAt    time.Time
+	IsSuperAdmin bool
+}
+
+// SystemFileShareRevokeByIDInput 定义按分享记录标识撤销的服务输入。
+type SystemFileShareRevokeByIDInput struct {
+	ShareID      int
+	IsSuperAdmin bool
+}
+
+// SystemFileShareDownloadInput 定义根据令牌下载分享文件的服务输入。
+type SystemFileShareDownloadInput struct {
+	Token string
+}
+
+// SystemFileShareItem 定义文件分享记录的接口返回内容。
+type SystemFileShareItem struct {
+	Id          int        `json:"id"`
+	DownloadURL string     `json:"downloadUrl"`
+	ExpiresAt   time.Time  `json:"expiresAt"`
+	RevokedAt   *time.Time `json:"revokedAt"`
+	CreatedAt   time.Time  `json:"createdAt"`
+	Status      string     `json:"status"`
+}

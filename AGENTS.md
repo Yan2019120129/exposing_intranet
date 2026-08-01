@@ -1,0 +1,2 @@
+- app/service层对app/apis提供的方法参数除需要响应的数据参数外参数大于两个应在app/service/dto创建结构体传递参数
+- 当构建新模型时需要添加 apis，router，service，dto, tables方法时应根据模型名创对应规范(如模型名：SystemFile，文件名应为system_file.go)的文件实现方法。
