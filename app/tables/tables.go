@@ -17,10 +17,10 @@ import "github.com/GoAdminGroup/go-admin/plugins/admin/modules/table"
 //
 // example end
 var Generators = map[string]table.Generator{
-	"test":         GetTestTable,
-	"system_files": GetSystemFileTable,
+	"test":               GetTestTable,
+	"system_files":       GetSystemFileTable,
 	"system_file_shares": GetSystemFileShareTable,
-	"client":       GetClientTable,
-	"port":         GetPortTable,
+	"client":             GetClientTable,
+	"port":               GetPortTable,
 	// generators end
 }
