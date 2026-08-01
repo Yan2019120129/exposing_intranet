@@ -15,6 +15,7 @@ import (
 
 	"github.com/GoAdminGroup/go-admin/context"
 	"github.com/GoAdminGroup/go-admin/modules/auth"
+	adminConfig "github.com/GoAdminGroup/go-admin/modules/config"
 	"github.com/GoAdminGroup/go-admin/modules/db"
 	form1 "github.com/GoAdminGroup/go-admin/plugins/admin/modules/form"
 	"github.com/GoAdminGroup/go-admin/plugins/admin/modules/table"
@@ -35,24 +36,31 @@ func GetSystemFileShareTable(ctx *context.Context) table.Table {
 	user := auth.Auth(ctx)
 
 	info := config.GetInfo().HideFilterArea()
-	info.AddField("ID", "id", db.Bigint).FieldFilterable()
+	ConfigureFileNameDisplay(info)
+	info.AddField("ID", "id", db.Bigint).
+		FieldWidth(50).
+		FieldFilterable()
 	//info.AddField("文件 ID", "system_file_id", db.Bigint).FieldFilterable()
 	info.AddField("分享文件", "original_name", db.Varchar).
 		FieldJoin(types.Join{Field: "system_file_id", JoinField: "id", Table: "system_files"}).
+		FieldWidth(180).
+		FieldDisplay(DisplayFileName)
+	info.AddField("分享链接", "token", db.Varchar).
+		FieldWidth(100).
 		FieldDisplay(func(value types.FieldModel) interface{} {
-			return fmt.Sprint(value.Row["system_files_goadmin_join_original_name"])
+			return renderSystemFileShareCopyButton(value.Value)
 		})
-	info.AddField("分享链接", "token", db.Varchar).FieldDisplay(func(value types.FieldModel) interface{} {
-		return renderSystemFileShareDownloadLink(value.Value)
-	})
 	info.AddField("到期时间", "expires_at", db.Datetime).FieldFilterable().
 		FieldDisplay(formatSystemFileShareTime)
-	info.AddField("创建人", "created_by", db.Bigint).FieldFilterable()
+	info.AddField("创建人", "username", db.Varchar).
+		FieldJoin(types.Join{Table: adminConfig.GetAuthUserTable(), JoinField: "id", Field: "created_by"}).
+		FieldFilterable().
+		FieldDisplay(formatSystemFileShareCreator)
 	info.AddField("撤销时间", "revoked_at", db.Datetime).
 		FieldDisplay(formatSystemFileShareTime)
 	info.AddColumn("状态", func(value types.FieldModel) interface{} {
 		return renderSystemFileShareStatus(value.Row)
-	})
+	}).FieldWidth(65)
 	info.AddField("创建时间", "created_at", db.Datetime).FieldFilterable().
 		FieldDisplay(formatSystemFileShareTime)
 	info.AddField("更新时间", "updated_at", db.Datetime).
@@ -61,12 +69,13 @@ func GetSystemFileShareTable(ctx *context.Context) table.Table {
 		SetDeleteFnWithDB(func(gormDB *gorm.DB, ids []string) error {
 			return revokeSystemFileSharesByDB(gormDB, ids, user.IsSuperAdmin())
 		})
+	info.SetFooterHtml(systemFileShareCopyScript())
 	info.WhereRaw("system_file_id IN (SELECT id FROM system_files WHERE status = 1" + systemFileShareVisibilityCondition(user.IsSuperAdmin()) + ")")
 
 	formList := config.GetForm()
 	formList.AddField("ID", "id", db.Bigint, form.Default).FieldDisableWhenCreate()
 	formList.AddField("系统文件", "system_file_id", db.Bigint, form.SelectSingle).
-		FieldOptionsFromTable("system_files", "original_name", "id").
+		FieldOptionsFromTable("system_files", "original_name", "id", systemFileShareFileOptionsQuery(user.IsSuperAdmin())).
 		FieldDisplayButCanNotEditWhenUpdate()
 	formList.AddField("分享时长", "duration_hours", db.Int, form.SelectSingle).
 		FieldOptions(systemFileShareDurationOptions()).
@@ -82,6 +91,17 @@ func GetSystemFileShareTable(ctx *context.Context) table.Table {
 	})
 
 	return config
+}
+
+// systemFileShareFileOptionsQuery 返回分享创建表单中可选择文件的查询条件。
+func systemFileShareFileOptionsQuery(isSuperAdmin bool) types.OptionTableQueryProcessFn {
+	return func(sql *db.SQL) *db.SQL {
+		condition := "deleted_at IS NULL AND status = 1"
+		if !isSuperAdmin {
+			condition += " AND is_public = 1"
+		}
+		return sql.WhereRaw(condition)
+	}
 }
 
 // insertSystemFileShareByDB 按选定时长创建新的分享记录。
@@ -170,6 +190,15 @@ func formatSystemFileShareTime(value types.FieldModel) interface{} {
 	return t.Format(time.DateTime)
 }
 
+// formatSystemFileShareCreator 格式化分享记录的创建人用户名。
+func formatSystemFileShareCreator(value types.FieldModel) interface{} {
+	username := strings.TrimSpace(value.Value)
+	if username == "" {
+		return "-"
+	}
+	return username
+}
+
 // parseSystemFileShareTime 解析后台表单提交的到期时间。
 func parseSystemFileShareTime(value string) (time.Time, error) {
 	value = strings.TrimSpace(value)
@@ -184,10 +213,54 @@ func parseSystemFileShareTime(value string) (time.Time, error) {
 	return time.Time{}, errors.New("到期时间格式不正确")
 }
 
-// renderSystemFileShareDownloadLink 渲染分享链接的下载入口。
-func renderSystemFileShareDownloadLink(token string) template.HTML {
+// renderSystemFileShareCopyButton 渲染复制分享下载链接的按钮。
+func renderSystemFileShareCopyButton(token string) template.HTML {
 	token = template.HTMLEscapeString(token)
-	return template.HTML(`<a class="btn btn-xs btn-primary" href="/shares/` + token + `/download" target="_blank">下载</a>`)
+	return template.HTML(`<button type="button" class="btn btn-xs btn-primary system-file-share-copy-button" data-download-path="/shares/` + token + `/download">复制链接</button>`)
+}
+
+// systemFileShareCopyScript 返回分享链接复制按钮的页面交互脚本。
+func systemFileShareCopyScript() template.HTML {
+	return template.HTML(`
+<script>
+(function () {
+  function copyLink(link) {
+    if (navigator.clipboard && window.isSecureContext) {
+      return navigator.clipboard.writeText(link);
+    }
+    var input = document.createElement('textarea');
+    input.value = link;
+    input.style.position = 'fixed';
+    input.style.opacity = '0';
+    document.body.appendChild(input);
+    input.select();
+    var copied = document.execCommand('copy');
+    document.body.removeChild(input);
+    return copied ? Promise.resolve() : Promise.reject(new Error('copy failed'));
+  }
+
+  $(document).off('click.systemFileShareTableCopy', '.system-file-share-copy-button').on('click.systemFileShareTableCopy', '.system-file-share-copy-button', function () {
+    var button = $(this);
+    var path = button.data('download-path');
+    if (!path) {
+      return;
+    }
+    var link = new URL(path, window.location.origin).toString();
+    var text = button.text();
+    button.prop('disabled', true);
+    copyLink(link).then(function () {
+      button.text('已复制');
+      window.setTimeout(function () {
+        button.text(text);
+      }, 1500);
+      button.prop('disabled', false);
+    }, function () {
+      window.prompt('请复制下载链接', link);
+      button.prop('disabled', false);
+    });
+  });
+}());
+</script>`)
 }
 
 // renderSystemFileShareStatus 根据撤销和到期状态渲染状态标签。

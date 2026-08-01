@@ -70,3 +70,40 @@ func TestSystemFileShareCreateDownloadAndRevoke(t *testing.T) {
 		t.Fatalf("已撤销链接应不可下载，实际错误: %v", err)
 	}
 }
+
+// TestSystemFileShareRejectsDeletedFile 验证已删除文件不能创建分享链接。
+func TestSystemFileShareRejectsDeletedFile(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("打开内存数据库失败: %v", err)
+	}
+	if err := db.AutoMigrate(&models.SystemFile{}, &models.SystemFileShare{}); err != nil {
+		t.Fatalf("迁移系统文件分享测试表失败: %v", err)
+	}
+
+	deletedAt := time.Now()
+	file := models.SystemFile{
+		BaseModel: models.BaseModel{
+			DeletedAt: &deletedAt,
+		},
+		OriginalName: "deleted.txt",
+		FileName:     "deleted.txt",
+		StoragePath:  "default/deleted.txt",
+		Status:       1,
+		IsPublic:     true,
+	}
+	if err := db.Create(&file).Error; err != nil {
+		t.Fatalf("创建已删除测试文件失败: %v", err)
+	}
+
+	fileShare := SystemFileShare{Service: codeService.Service{Orm: db}}
+	_, err = fileShare.Create(&dto.SystemFileShareCreateInput{
+		FileID:        file.Id,
+		DurationHours: systemFileShareOneDayHours,
+		CreatedBy:     7,
+		IsSuperAdmin:  true,
+	}, &models.SystemFile{})
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("已删除文件不应创建分享链接，实际错误: %v", err)
+	}
+}

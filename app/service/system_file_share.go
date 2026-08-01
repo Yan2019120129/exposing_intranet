@@ -181,7 +181,7 @@ func (e *SystemFileShare) GetDownloadFile(input *dto.SystemFileShareDownloadInpu
 	if err := e.Orm.Where("token = ? AND revoked_at IS NULL AND expires_at > ?", input.Token, time.Now()).First(&share).Error; err != nil {
 		return err
 	}
-	return e.Orm.Where("id = ? AND status = ?", share.SystemFileID, 1).First(item).Error
+	return e.Orm.Where("id = ? AND status = ? AND deleted_at IS NULL", share.SystemFileID, 1).First(item).Error
 }
 
 // generateToken 生成不可预测的 URL 安全分享令牌。

@@ -25,37 +25,52 @@ func GetSystemFileTable(ctx *context.Context) table.Table {
 	config := table.NewDefaultTable(ctx, table.DefaultConfigWithDriver("mysql").SetPrimaryKey("id", db.Bigint))
 
 	info := config.GetInfo().HideFilterArea()
-	info.AddField("Id", "id", db.Bigint).FieldFilterable()
-	info.AddField("预览", "storage_path", db.Varchar).FieldDisplay(func(value types.FieldModel) interface{} {
-		return renderSystemFilePreview(fmt.Sprint(value.Row["public_url"]), value.Row["mime_type"])
-	})
-	info.AddField("原始文件名", "original_name", db.Varchar).FieldCopyable()
+	ConfigureFileNameDisplay(info)
+	info.AddField("Id", "id", db.Bigint).
+		FieldWidth(50).
+		FieldFilterable()
+	info.AddField("预览", "storage_path", db.Varchar).
+		FieldWidth(120).
+		FieldDisplay(func(value types.FieldModel) interface{} {
+			return renderSystemFilePreview(fmt.Sprint(value.Row["public_url"]), value.Row["mime_type"])
+		})
+	info.AddField("原始文件名", "original_name", db.Varchar).
+		FieldWidth(150).
+		FieldDisplay(DisplayFileName)
 	info.AddField("分类", "category", db.Varchar).FieldFilterable()
-	info.AddField("大小", "file_size", db.Bigint).FieldDisplay(func(value types.FieldModel) interface{} {
-		size, _ := strconv.ParseInt(value.Value, 10, 64)
-		return fmt.Sprintf("%s (%d B)", humanFileSize(size), size)
-	})
-	info.AddField("MIME", "mime_type", db.Varchar)
-	info.AddField("URL", "public_url", db.Varchar).FieldDisplay(func(value types.FieldModel) interface{} {
-		return renderSystemFileQuickShareLink(fmt.Sprint(value.Row["id"]), value.Value)
-	})
-	info.AddField("下载", "file_hash", db.Varchar).FieldDisplay(func(value types.FieldModel) interface{} {
-		return renderSystemFileDownloadButton(fmt.Sprint(value.Row["id"]))
-	})
+	info.AddField("大小", "file_size", db.Bigint).
+		FieldWidth(200).
+		FieldDisplay(func(value types.FieldModel) interface{} {
+			size, _ := strconv.ParseInt(value.Value, 10, 64)
+			return fmt.Sprintf("%s (%d B)", humanFileSize(size), size)
+		})
+	info.AddField("MIME", "mime_type", db.Varchar).
+		FieldWidth(200)
+	//info.AddField("URL", "public_url", db.Varchar).FieldWidth(120).FieldDisplay(func(value types.FieldModel) interface{} {
+	//	return renderSystemFileQuickShareLink(fmt.Sprint(value.Row["id"]), value.Value)
+	//})
+	info.AddField("下载", "file_hash", db.Varchar).
+		FieldWidth(70).
+		FieldDisplay(func(value types.FieldModel) interface{} {
+			return renderSystemFileDownloadButton(fmt.Sprint(value.Row["id"]))
+		})
 	info.AddColumn("分享", func(value types.FieldModel) interface{} {
 		return renderSystemFileShareButton(fmt.Sprint(value.Row["id"]))
-	})
-	info.AddField("状态", "status", db.Int).FieldDisplay(func(value types.FieldModel) interface{} {
-		switch value.Value {
-		case "1":
-			return template.HTML(`<span class="label label-success">正常</span>`)
-		case "0":
-			return template.HTML(`<span class="label label-warning">禁用</span>`)
-		default:
-			return template.HTML(`<span class="label label-default">删除</span>`)
-		}
-	})
+	}).FieldWidth(70)
+	info.AddField("状态", "status", db.Int).
+		FieldWidth(65).
+		FieldDisplay(func(value types.FieldModel) interface{} {
+			switch value.Value {
+			case "1":
+				return template.HTML(`<span class="label label-success">正常</span>`)
+			case "0":
+				return template.HTML(`<span class="label label-warning">禁用</span>`)
+			default:
+				return template.HTML(`<span class="label label-default">删除</span>`)
+			}
+		})
 	info.AddField("Created_at", "created_at", db.Datetime).
+		FieldWidth(180).
 		FieldDisplay(func(value types.FieldModel) interface{} {
 			t, err := time.Parse(time.RFC3339Nano, value.Value)
 			if err != nil {
@@ -64,6 +79,7 @@ func GetSystemFileTable(ctx *context.Context) table.Table {
 			return t.Format(time.DateTime)
 		})
 	info.AddField("Updated_at", "updated_at", db.Datetime).
+		FieldWidth(180).
 		FieldDisplay(func(value types.FieldModel) interface{} {
 			t, err := time.Parse(time.RFC3339Nano, value.Value)
 			if err != nil {
