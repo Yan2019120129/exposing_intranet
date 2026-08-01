@@ -11,30 +11,10 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// AdminAuthMiddleware protects custom Gin routes with GoAdmin's auth session
-// and permission table rules.
+// AdminAuthMiddleware 校验自定义路由的后台会话和接口权限。
 func AdminAuthMiddleware(c *gin.Context) {
-	conn, err := code.GetGoAdminConnection(c)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code": http.StatusInternalServerError,
-			"msg":  "database connection not found",
-		})
-		c.Abort()
-		return
-	}
-
-	cookie, err := c.Cookie(auth.DefaultCookieKey)
-	if err != nil || cookie == "" {
-		c.Redirect(http.StatusFound, config.Url(config.GetLoginUrl()))
-		c.Abort()
-		return
-	}
-
-	user, ok := auth.GetCurUser(cookie, conn)
+	user, ok := getAdminUser(c)
 	if !ok {
-		c.Redirect(http.StatusFound, config.Url(config.GetLoginUrl()))
-		c.Abort()
 		return
 	}
 
@@ -50,6 +30,53 @@ func AdminAuthMiddleware(c *gin.Context) {
 
 	c.Set("user", user)
 	c.Next()
+}
+
+// SystemFileAccessMiddleware 校验系统文件列表访问权限并注入后台用户。
+func SystemFileAccessMiddleware(c *gin.Context) {
+	user, ok := getAdminUser(c)
+	if !ok {
+		return
+	}
+	if !auth.CheckPermissions(user, "/admin/info/system_files", http.MethodGet, nil) {
+		c.JSON(http.StatusForbidden, gin.H{
+			"code": http.StatusForbidden,
+			"msg":  "permission denied",
+		})
+		c.Abort()
+		return
+	}
+
+	c.Set("user", user)
+	c.Next()
+}
+
+// getAdminUser 根据会话获取当前后台用户。
+func getAdminUser(c *gin.Context) (models.UserModel, bool) {
+	conn, err := code.GetGoAdminConnection(c)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code": http.StatusInternalServerError,
+			"msg":  "database connection not found",
+		})
+		c.Abort()
+		return models.UserModel{}, false
+	}
+
+	cookie, err := c.Cookie(auth.DefaultCookieKey)
+	if err != nil || cookie == "" {
+		c.Redirect(http.StatusFound, config.Url(config.GetLoginUrl()))
+		c.Abort()
+		return models.UserModel{}, false
+	}
+
+	user, ok := auth.GetCurUser(cookie, conn)
+	if !ok {
+		c.Redirect(http.StatusFound, config.Url(config.GetLoginUrl()))
+		c.Abort()
+		return models.UserModel{}, false
+	}
+	return user, true
 }
 
 func checkGoAdminPermission(c *gin.Context, user models.UserModel) bool {
