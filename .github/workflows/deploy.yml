@@ -79,6 +79,14 @@ jobs:
       - name: Go vet
         run: go vet ./...
 
+      - name: Test app/service serially
+        id: app_service_tests
+        run: go test -count=1 -p=1 -timeout=30s -v ./app/service
+
+      - name: Diagnose app/service test failure
+        if: failure() && steps.app_service_tests.outcome == 'failure'
+        run: go test -count=1 -p=1 -timeout=30s -json ./app/service
+
       - name: Test
         run: go test -v ./...
 
