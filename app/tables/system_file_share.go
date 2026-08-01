@@ -10,6 +10,7 @@ import (
 
 	"my-base/app/models"
 	"my-base/app/service"
+	"my-base/app/service/dto"
 	codeService "my-base/code/service"
 
 	"github.com/GoAdminGroup/go-admin/context"
@@ -88,7 +89,12 @@ func insertSystemFileShareByDB(gormDB *gorm.DB, values form1.Values, createdBy i
 	fileID := values.GetIntDefault("system_file_id", 0)
 	durationHours := values.GetIntDefault("duration_hours", 0)
 	fileShare := newSystemFileShareService(gormDB)
-	_, err := fileShare.Create(fileID, durationHours, createdBy, isSuperAdmin, &models.SystemFile{})
+	_, err := fileShare.Create(&dto.SystemFileShareCreateInput{
+		FileID:        fileID,
+		DurationHours: durationHours,
+		CreatedBy:     createdBy,
+		IsSuperAdmin:  isSuperAdmin,
+	}, &models.SystemFile{})
 	return err
 }
 
@@ -100,7 +106,11 @@ func updateSystemFileShareByDB(gormDB *gorm.DB, values form1.Values, isSuperAdmi
 		return err
 	}
 	fileShare := newSystemFileShareService(gormDB)
-	return fileShare.UpdateExpiresAt(shareID, expiresAt, isSuperAdmin)
+	return fileShare.UpdateExpiresAt(&dto.SystemFileShareUpdateExpiresAtInput{
+		ShareID:      shareID,
+		ExpiresAt:    expiresAt,
+		IsSuperAdmin: isSuperAdmin,
+	})
 }
 
 // revokeSystemFileSharesByDB 批量逻辑撤销分享记录，任一失败时回滚全部操作。
@@ -115,7 +125,10 @@ func revokeSystemFileSharesByDB(gormDB *gorm.DB, ids []string, isSuperAdmin bool
 			if err != nil || shareID <= 0 {
 				return errors.New("分享记录标识无效")
 			}
-			if err := fileShare.RevokeByID(shareID, isSuperAdmin); err != nil {
+			if err := fileShare.RevokeByID(&dto.SystemFileShareRevokeByIDInput{
+				ShareID:      shareID,
+				IsSuperAdmin: isSuperAdmin,
+			}); err != nil {
 				return err
 			}
 		}
@@ -124,8 +137,8 @@ func revokeSystemFileSharesByDB(gormDB *gorm.DB, ids []string, isSuperAdmin bool
 }
 
 // newSystemFileShareService 使用当前数据库连接创建分享服务对象。
-func newSystemFileShareService(gormDB *gorm.DB) service.FileShare {
-	return service.FileShare{Service: codeService.Service{Orm: gormDB}}
+func newSystemFileShareService(gormDB *gorm.DB) service.SystemFileShare {
+	return service.SystemFileShare{Service: codeService.Service{Orm: gormDB}}
 }
 
 // systemFileShareDurationOptions 返回后台表单可选的固定分享时长。

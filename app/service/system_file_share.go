@@ -7,15 +7,16 @@ import (
 	"time"
 
 	"my-base/app/models"
+	"my-base/app/service/dto"
 	"my-base/code/service"
 
 	"gorm.io/gorm"
 )
 
 const (
-	fileShareOneDayHours     = 24
-	fileShareSevenDaysHours  = 24 * 7
-	fileShareThirtyDaysHours = 24 * 30
+	systemFileShareOneDayHours     = 24
+	systemFileShareSevenDaysHours  = 24 * 7
+	systemFileShareThirtyDaysHours = 24 * 30
 )
 
 var (
@@ -31,41 +32,44 @@ var (
 	ErrShareRevoked = errors.New("share revoked")
 )
 
-// FileShare 提供系统文件分享记录的管理能力。
-type FileShare struct {
+// SystemFileShare 提供系统文件分享记录的管理能力。
+type SystemFileShare struct {
 	service.Service
 }
 
 // IsValidDuration 判断分享有效期是否为允许的固定选项。
-func (e *FileShare) IsValidDuration(hours int) bool {
-	return hours == fileShareOneDayHours || hours == fileShareSevenDaysHours || hours == fileShareThirtyDaysHours
+func (e *SystemFileShare) IsValidDuration(hours int) bool {
+	return hours == systemFileShareOneDayHours || hours == systemFileShareSevenDaysHours || hours == systemFileShareThirtyDaysHours
 }
 
 // GetManageableFile 获取当前后台用户可管理的正常文件。
-func (e *FileShare) GetManageableFile(fileID int, isSuperAdmin bool, item *models.SystemFile) error {
-	if fileID <= 0 {
+func (e *SystemFileShare) GetManageableFile(input *dto.SystemFileShareManageFileInput, item *models.SystemFile) error {
+	if input == nil || input.FileID <= 0 {
 		return ErrInvalidFileID
 	}
 	if item == nil {
 		return errors.New("file is required")
 	}
 
-	orm := e.Orm.Where("id = ? AND status = ?", fileID, 1)
-	if !isSuperAdmin {
+	orm := e.Orm.Where("id = ? AND status = ?", input.FileID, 1)
+	if !input.IsSuperAdmin {
 		orm = orm.Where("is_public = ?", true)
 	}
 	return orm.First(item).Error
 }
 
 // Create 创建指定有效期的文件分享记录。
-func (e *FileShare) Create(fileID, durationHours int, createdBy int64, isSuperAdmin bool, item *models.SystemFile) (*models.SystemFileShare, error) {
-	if item == nil {
+func (e *SystemFileShare) Create(input *dto.SystemFileShareCreateInput, item *models.SystemFile) (*models.SystemFileShare, error) {
+	if input == nil || item == nil {
 		return nil, errors.New("file is required")
 	}
-	if err := e.GetManageableFile(fileID, isSuperAdmin, item); err != nil {
+	if err := e.GetManageableFile(&dto.SystemFileShareManageFileInput{
+		FileID:       input.FileID,
+		IsSuperAdmin: input.IsSuperAdmin,
+	}, item); err != nil {
 		return nil, err
 	}
-	if !e.IsValidDuration(durationHours) {
+	if !e.IsValidDuration(input.DurationHours) {
 		return nil, ErrInvalidShareDuration
 	}
 
@@ -74,10 +78,10 @@ func (e *FileShare) Create(fileID, durationHours int, createdBy int64, isSuperAd
 		return nil, err
 	}
 	share := &models.SystemFileShare{
-		SystemFileID: fileID,
+		SystemFileID: input.FileID,
 		Token:        token,
-		ExpiresAt:    time.Now().Add(time.Duration(durationHours) * time.Hour),
-		CreatedBy:    createdBy,
+		ExpiresAt:    time.Now().Add(time.Duration(input.DurationHours) * time.Hour),
+		CreatedBy:    input.CreatedBy,
 	}
 	if err := e.Orm.Create(share).Error; err != nil {
 		return nil, err
@@ -86,21 +90,21 @@ func (e *FileShare) Create(fileID, durationHours int, createdBy int64, isSuperAd
 }
 
 // List 返回指定文件的全部分享记录，按创建时间倒序排列。
-func (e *FileShare) List(fileID int, shares *[]models.SystemFileShare) error {
-	if fileID <= 0 {
+func (e *SystemFileShare) List(input *dto.SystemFileShareListInput, shares *[]models.SystemFileShare) error {
+	if input == nil || input.FileID <= 0 {
 		return ErrInvalidFileID
 	}
-	return e.Orm.Where("system_file_id = ?", fileID).Order("id desc").Find(shares).Error
+	return e.Orm.Where("system_file_id = ?", input.FileID).Order("id desc").Find(shares).Error
 }
 
 // Revoke 撤销指定文件的分享记录。
-func (e *FileShare) Revoke(fileID, shareID int) error {
-	if fileID <= 0 || shareID <= 0 {
+func (e *SystemFileShare) Revoke(input *dto.SystemFileShareRevokeInput) error {
+	if input == nil || input.FileID <= 0 || input.ShareID <= 0 {
 		return ErrInvalidShareID
 	}
 	now := time.Now()
 	result := e.Orm.Model(&models.SystemFileShare{}).
-		Where("id = ? AND system_file_id = ? AND revoked_at IS NULL", shareID, fileID).
+		Where("id = ? AND system_file_id = ? AND revoked_at IS NULL", input.ShareID, input.FileID).
 		Update("revoked_at", now)
 	if result.Error != nil {
 		return result.Error
@@ -112,16 +116,16 @@ func (e *FileShare) Revoke(fileID, shareID int) error {
 }
 
 // UpdateExpiresAt 更新可管理且未撤销分享链接的到期时间。
-func (e *FileShare) UpdateExpiresAt(shareID int, expiresAt time.Time, isSuperAdmin bool) error {
-	if shareID <= 0 {
+func (e *SystemFileShare) UpdateExpiresAt(input *dto.SystemFileShareUpdateExpiresAtInput) error {
+	if input == nil || input.ShareID <= 0 {
 		return ErrInvalidShareID
 	}
-	if !expiresAt.After(time.Now()) {
+	if !input.ExpiresAt.After(time.Now()) {
 		return ErrInvalidShareExpiresAt
 	}
 
 	share := models.SystemFileShare{}
-	if err := e.Orm.Where("id = ?", shareID).First(&share).Error; err != nil {
+	if err := e.Orm.Where("id = ?", input.ShareID).First(&share).Error; err != nil {
 		return err
 	}
 	if share.RevokedAt != nil {
@@ -129,12 +133,15 @@ func (e *FileShare) UpdateExpiresAt(shareID int, expiresAt time.Time, isSuperAdm
 	}
 
 	item := models.SystemFile{}
-	if err := e.GetManageableFile(share.SystemFileID, isSuperAdmin, &item); err != nil {
+	if err := e.GetManageableFile(&dto.SystemFileShareManageFileInput{
+		FileID:       share.SystemFileID,
+		IsSuperAdmin: input.IsSuperAdmin,
+	}, &item); err != nil {
 		return err
 	}
 	result := e.Orm.Model(&models.SystemFileShare{}).
-		Where("id = ? AND revoked_at IS NULL", shareID).
-		Update("expires_at", expiresAt)
+		Where("id = ? AND revoked_at IS NULL", input.ShareID).
+		Update("expires_at", input.ExpiresAt)
 	if result.Error != nil {
 		return result.Error
 	}
@@ -145,37 +152,40 @@ func (e *FileShare) UpdateExpiresAt(shareID int, expiresAt time.Time, isSuperAdm
 }
 
 // RevokeByID 撤销当前后台用户可管理的分享链接。
-func (e *FileShare) RevokeByID(shareID int, isSuperAdmin bool) error {
-	if shareID <= 0 {
+func (e *SystemFileShare) RevokeByID(input *dto.SystemFileShareRevokeByIDInput) error {
+	if input == nil || input.ShareID <= 0 {
 		return ErrInvalidShareID
 	}
 
 	share := models.SystemFileShare{}
-	if err := e.Orm.Where("id = ?", shareID).First(&share).Error; err != nil {
+	if err := e.Orm.Where("id = ?", input.ShareID).First(&share).Error; err != nil {
 		return err
 	}
 	item := models.SystemFile{}
-	if err := e.GetManageableFile(share.SystemFileID, isSuperAdmin, &item); err != nil {
+	if err := e.GetManageableFile(&dto.SystemFileShareManageFileInput{
+		FileID:       share.SystemFileID,
+		IsSuperAdmin: input.IsSuperAdmin,
+	}, &item); err != nil {
 		return err
 	}
-	return e.Revoke(share.SystemFileID, shareID)
+	return e.Revoke(&dto.SystemFileShareRevokeInput{FileID: share.SystemFileID, ShareID: input.ShareID})
 }
 
 // GetDownloadFile 根据有效分享令牌获取可下载文件。
-func (e *FileShare) GetDownloadFile(token string, item *models.SystemFile) error {
-	if token == "" {
+func (e *SystemFileShare) GetDownloadFile(input *dto.SystemFileShareDownloadInput, item *models.SystemFile) error {
+	if input == nil || input.Token == "" {
 		return gorm.ErrRecordNotFound
 	}
 
 	share := models.SystemFileShare{}
-	if err := e.Orm.Where("token = ? AND revoked_at IS NULL AND expires_at > ?", token, time.Now()).First(&share).Error; err != nil {
+	if err := e.Orm.Where("token = ? AND revoked_at IS NULL AND expires_at > ?", input.Token, time.Now()).First(&share).Error; err != nil {
 		return err
 	}
 	return e.Orm.Where("id = ? AND status = ?", share.SystemFileID, 1).First(item).Error
 }
 
 // generateToken 生成不可预测的 URL 安全分享令牌。
-func (e *FileShare) generateToken() (string, error) {
+func (e *SystemFileShare) generateToken() (string, error) {
 	bytes := make([]byte, 32)
 	if _, err := rand.Read(bytes); err != nil {
 		return "", err

@@ -7,11 +7,12 @@ import (
 )
 
 func init() {
-	routerNoCheckRole = append(routerNoCheckRole, fileShareRouter)
+	routerNoCheckRole = append(routerNoCheckRole, systemFileShareRouter)
 }
 
-func fileShareRouter(v1 *gin.RouterGroup) {
-	api := apis.File{}
+// systemFileShareRouter 注册系统文件分享路由。
+func systemFileShareRouter(v1 *gin.RouterGroup) {
+	api := apis.SystemFileShare{}
 	group := v1.Group("/admin/files", SystemFileAccessMiddleware)
 	{
 		group.GET("/:id/shares", api.ShareList)

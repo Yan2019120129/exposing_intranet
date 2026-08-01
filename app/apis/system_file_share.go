@@ -2,11 +2,8 @@ package apis
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -15,45 +12,20 @@ import (
 	"my-base/app/service"
 	"my-base/app/service/dto"
 	"my-base/code/api"
-	"my-base/configs"
 
 	adminModels "github.com/GoAdminGroup/go-admin/plugins/admin/models"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
-type File struct {
+// SystemFileShare 提供系统文件分享接口。
+type SystemFileShare struct {
 	api.Api
 }
 
-func (e File) Download(ctx *gin.Context) {
-	if err := e.MakeContext(ctx).MakeOrm().Errors; err != nil {
-		e.Error(http.StatusInternalServerError, err, err.Error())
-		return
-	}
-
-	id, err := strconv.Atoi(ctx.Param("id"))
-	if err != nil || id <= 0 {
-		e.Error(http.StatusBadRequest, errors.New("invalid id"), "invalid id")
-		return
-	}
-
-	item := models.SystemFile{}
-	if err := e.Orm.Where("id = ? AND status = ?", id, 1).First(&item).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			e.Error(http.StatusNotFound, err, "file not found")
-			return
-		}
-		e.Error(http.StatusInternalServerError, err, err.Error())
-		return
-	}
-
-	e.serveDownload(ctx, &item)
-}
-
 // ShareList 返回当前后台用户可管理文件的分享记录。
-func (e File) ShareList(ctx *gin.Context) {
-	s := service.FileShare{}
+func (e SystemFileShare) ShareList(ctx *gin.Context) {
+	s := service.SystemFileShare{}
 	if err := e.MakeContext(ctx).MakeOrm().MakeService(&s.Service).Errors; err != nil {
 		e.Error(http.StatusInternalServerError, err, err.Error())
 		return
@@ -68,13 +40,16 @@ func (e File) ShareList(ctx *gin.Context) {
 		return
 	}
 	item := models.SystemFile{}
-	if err := s.GetManageableFile(fileID, user.IsSuperAdmin(), &item); err != nil {
+	if err := s.GetManageableFile(&dto.SystemFileShareManageFileInput{
+		FileID:       fileID,
+		IsSuperAdmin: user.IsSuperAdmin(),
+	}, &item); err != nil {
 		e.handleShareFileError(err)
 		return
 	}
 
 	shares := make([]models.SystemFileShare, 0)
-	if err := s.List(fileID, &shares); err != nil {
+	if err := s.List(&dto.SystemFileShareListInput{FileID: fileID}, &shares); err != nil {
 		e.Error(http.StatusInternalServerError, err, err.Error())
 		return
 	}
@@ -82,8 +57,8 @@ func (e File) ShareList(ctx *gin.Context) {
 }
 
 // CreateShare 创建并返回可公开下载的文件分享链接。
-func (e File) CreateShare(ctx *gin.Context) {
-	s := service.FileShare{}
+func (e SystemFileShare) CreateShare(ctx *gin.Context) {
+	s := service.SystemFileShare{}
 	if err := e.MakeContext(ctx).MakeOrm().MakeService(&s.Service).Errors; err != nil {
 		e.Error(http.StatusInternalServerError, err, err.Error())
 		return
@@ -97,14 +72,19 @@ func (e File) CreateShare(ctx *gin.Context) {
 	if !ok {
 		return
 	}
-	payload := dto.FileShareCreatePayload{}
+	payload := dto.SystemFileShareCreatePayload{}
 	if err := ctx.ShouldBindJSON(&payload); err != nil {
 		e.Error(http.StatusBadRequest, err, "invalid json body")
 		return
 	}
 
 	item := models.SystemFile{}
-	share, err := s.Create(fileID, payload.DurationHours, user.Id, user.IsSuperAdmin(), &item)
+	share, err := s.Create(&dto.SystemFileShareCreateInput{
+		FileID:        fileID,
+		DurationHours: payload.DurationHours,
+		CreatedBy:     user.Id,
+		IsSuperAdmin:  user.IsSuperAdmin(),
+	}, &item)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			e.Error(http.StatusNotFound, err, "file not found")
@@ -121,8 +101,8 @@ func (e File) CreateShare(ctx *gin.Context) {
 }
 
 // RevokeShare 撤销指定文件的分享链接。
-func (e File) RevokeShare(ctx *gin.Context) {
-	s := service.FileShare{}
+func (e SystemFileShare) RevokeShare(ctx *gin.Context) {
+	s := service.SystemFileShare{}
 	if err := e.MakeContext(ctx).MakeOrm().MakeService(&s.Service).Errors; err != nil {
 		e.Error(http.StatusInternalServerError, err, err.Error())
 		return
@@ -137,7 +117,10 @@ func (e File) RevokeShare(ctx *gin.Context) {
 		return
 	}
 	item := models.SystemFile{}
-	if err := s.GetManageableFile(fileID, user.IsSuperAdmin(), &item); err != nil {
+	if err := s.GetManageableFile(&dto.SystemFileShareManageFileInput{
+		FileID:       fileID,
+		IsSuperAdmin: user.IsSuperAdmin(),
+	}, &item); err != nil {
 		e.handleShareFileError(err)
 		return
 	}
@@ -146,7 +129,7 @@ func (e File) RevokeShare(ctx *gin.Context) {
 		e.Error(http.StatusBadRequest, errors.New("invalid share id"), "invalid share id")
 		return
 	}
-	if err := s.Revoke(fileID, shareID); err != nil {
+	if err := s.Revoke(&dto.SystemFileShareRevokeInput{FileID: fileID, ShareID: shareID}); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			e.Error(http.StatusNotFound, err, "share not found")
 			return
@@ -158,15 +141,15 @@ func (e File) RevokeShare(ctx *gin.Context) {
 }
 
 // ShareDownload 根据分享令牌下载文件，无需后台登录。
-func (e File) ShareDownload(ctx *gin.Context) {
-	s := service.FileShare{}
+func (e SystemFileShare) ShareDownload(ctx *gin.Context) {
+	s := service.SystemFileShare{}
 	if err := e.MakeContext(ctx).MakeOrm().MakeService(&s.Service).Errors; err != nil {
 		e.Error(http.StatusInternalServerError, err, err.Error())
 		return
 	}
 
 	item := models.SystemFile{}
-	if err := s.GetDownloadFile(strings.TrimSpace(ctx.Param("token")), &item); err != nil {
+	if err := s.GetDownloadFile(&dto.SystemFileShareDownloadInput{Token: strings.TrimSpace(ctx.Param("token"))}, &item); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			e.Error(http.StatusNotFound, err, "file not found")
 			return
@@ -174,44 +157,11 @@ func (e File) ShareDownload(ctx *gin.Context) {
 		e.Error(http.StatusInternalServerError, err, err.Error())
 		return
 	}
-	e.serveDownload(ctx, &item)
-}
-
-// serveDownload 校验本地文件并写入下载响应。
-func (e File) serveDownload(ctx *gin.Context, item *models.SystemFile) {
-	absPath, err := localSystemFilePath(item.StoragePath)
-	if err != nil {
-		e.Error(http.StatusBadRequest, err, err.Error())
-		return
-	}
-	if _, err := os.Stat(absPath); err != nil {
-		if os.IsNotExist(err) {
-			e.Error(http.StatusNotFound, err, "file not found")
-			return
-		}
-		e.Error(http.StatusInternalServerError, err, err.Error())
-		return
-	}
-
-	filename := strings.TrimSpace(item.OriginalName)
-	if filename == "" {
-		filename = item.FileName
-	}
-	if filename == "" {
-		filename = filepath.Base(absPath)
-	}
-
-	contentType := strings.TrimSpace(item.MimeType)
-	if contentType == "" {
-		contentType = "application/octet-stream"
-	}
-	ctx.Header("Content-Type", contentType)
-	ctx.Header("Content-Disposition", contentDisposition(filename))
-	ctx.File(absPath)
+	SystemFile{Api: e.Api}.serveDownload(ctx, &item)
 }
 
 // parseFileID 解析请求路径中的文件标识。
-func (e File) parseFileID(ctx *gin.Context) (int, bool) {
+func (e SystemFileShare) parseFileID(ctx *gin.Context) (int, bool) {
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil || id <= 0 {
 		e.Error(http.StatusBadRequest, errors.New("invalid id"), "invalid id")
@@ -221,7 +171,7 @@ func (e File) parseFileID(ctx *gin.Context) (int, bool) {
 }
 
 // shareUser 获取已通过文件管理权限校验的后台用户。
-func (e File) shareUser(ctx *gin.Context) (adminModels.UserModel, bool) {
+func (e SystemFileShare) shareUser(ctx *gin.Context) (adminModels.UserModel, bool) {
 	user, ok := ctx.Get("user")
 	if !ok {
 		e.Error(http.StatusInternalServerError, errors.New("admin user not found"), "admin user not found")
@@ -236,7 +186,7 @@ func (e File) shareUser(ctx *gin.Context) (adminModels.UserModel, bool) {
 }
 
 // handleShareFileError 返回文件不可管理时的统一响应。
-func (e File) handleShareFileError(err error) {
+func (e SystemFileShare) handleShareFileError(err error) {
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		e.Error(http.StatusNotFound, err, "file not found")
 		return
@@ -245,8 +195,8 @@ func (e File) handleShareFileError(err error) {
 }
 
 // shareItems 将分享记录转换为接口返回内容。
-func (e File) shareItems(ctx *gin.Context, shares []models.SystemFileShare) []dto.FileShareItem {
-	items := make([]dto.FileShareItem, 0, len(shares))
+func (e SystemFileShare) shareItems(ctx *gin.Context, shares []models.SystemFileShare) []dto.SystemFileShareItem {
+	items := make([]dto.SystemFileShareItem, 0, len(shares))
 	for _, share := range shares {
 		items = append(items, e.shareItem(ctx, share))
 	}
@@ -254,8 +204,8 @@ func (e File) shareItems(ctx *gin.Context, shares []models.SystemFileShare) []dt
 }
 
 // shareItem 将单条分享记录转换为接口返回内容。
-func (e File) shareItem(ctx *gin.Context, share models.SystemFileShare) dto.FileShareItem {
-	return dto.FileShareItem{
+func (e SystemFileShare) shareItem(ctx *gin.Context, share models.SystemFileShare) dto.SystemFileShareItem {
+	return dto.SystemFileShareItem{
 		Id:          share.Id,
 		DownloadURL: shareDownloadURL(ctx, share.Token),
 		ExpiresAt:   share.ExpiresAt,
@@ -289,45 +239,4 @@ func shareDownloadURL(ctx *gin.Context, token string) string {
 		}
 	}
 	return (&url.URL{Scheme: scheme, Host: ctx.Request.Host, Path: "/shares/" + token + "/download"}).String()
-}
-
-func localSystemFilePath(storagePath string) (string, error) {
-	storagePath = strings.TrimSpace(strings.ReplaceAll(storagePath, "\\", "/"))
-	if storagePath == "" {
-		return "", errors.New("empty storage path")
-	}
-	storagePath = strings.TrimPrefix(storagePath, "/")
-	prefix := strings.Trim(configs.GetAdmin().Store.Prefix, "/")
-	if prefix != "" && strings.HasPrefix(storagePath, prefix+"/") {
-		storagePath = strings.TrimPrefix(storagePath, prefix+"/")
-	}
-	cleaned := filepath.Clean(filepath.FromSlash(storagePath))
-	if cleaned == "." || strings.HasPrefix(cleaned, ".."+string(os.PathSeparator)) || filepath.IsAbs(cleaned) {
-		return "", errors.New("invalid storage path")
-	}
-	return filepath.Join(configs.GetAdmin().Store.Path, cleaned), nil
-}
-
-func contentDisposition(filename string) string {
-	asciiName := sanitizeASCIIFileName(filename)
-	if asciiName == "" {
-		asciiName = "download"
-	}
-	return fmt.Sprintf("attachment; filename=\"%s\"; filename*=UTF-8''%s", asciiName, url.PathEscape(filename))
-}
-
-func sanitizeASCIIFileName(filename string) string {
-	filename = strings.TrimSpace(filepath.Base(filename))
-	var b strings.Builder
-	for _, r := range filename {
-		if r < 32 || r == 127 || r == '"' || r == '\\' || r == '/' {
-			continue
-		}
-		if r > 126 {
-			b.WriteByte('_')
-			continue
-		}
-		b.WriteRune(r)
-	}
-	return b.String()
 }
