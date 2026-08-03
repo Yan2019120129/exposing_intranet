@@ -5,8 +5,13 @@
 package auth
 
 import (
+	stdcontext "context"
+	stderrors "errors"
+	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
+	"syscall"
 
 	"github.com/GoAdminGroup/go-admin/context"
 	"github.com/GoAdminGroup/go-admin/modules/config"
@@ -122,10 +127,15 @@ func (invoker *Invoker) SetPermissionDenyCallback(callback MiddlewareCallback) *
 // MiddlewareCallback is type of callback function.
 type MiddlewareCallback func(ctx *context.Context)
 
-// Middleware get the auth middleware from Invoker.
+// Middleware 返回插件使用的认证中间件。
 func (invoker *Invoker) Middleware() context.Handler {
 	return func(ctx *context.Context) {
-		user, authOk, permissionOk := Filter(ctx, invoker.conn)
+		user, authOk, permissionOk, formErr := Filter(ctx, invoker.conn)
+
+		if formErr != nil {
+			invoker.handleFormParseError(ctx, formErr)
+			return
+		}
 
 		if authOk && permissionOk {
 			ctx.SetUserValue("user", user)
@@ -148,9 +158,36 @@ func (invoker *Invoker) Middleware() context.Handler {
 	}
 }
 
-// Filter retrieve the user model from Context and check the permission
-// at the same time.
-func Filter(ctx *context.Context, conn db.Connection) (models.UserModel, bool, bool) {
+// handleFormParseError 记录表单解析错误，并返回不包含服务器内部细节的响应。
+func (invoker *Invoker) handleFormParseError(ctx *context.Context, err error) {
+	status, message := formParseErrorResponse(err)
+	logger.ErrorCtx(ctx,
+		"failed to parse request form: method=%s path=%s contentLength=%d err=%+v",
+		ctx.Method(), ctx.Request.URL.Path, ctx.Request.ContentLength, err)
+	ctx.JSON(status, map[string]interface{}{
+		"code": status,
+		"msg":  message,
+	})
+	ctx.Abort()
+}
+
+// formParseErrorResponse 将底层表单解析错误转换为安全的 HTTP 状态和提示。
+func formParseErrorResponse(err error) (int, string) {
+	switch {
+	case stderrors.Is(err, multipart.ErrMessageTooLarge):
+		return http.StatusRequestEntityTooLarge, "request body too large"
+	case stderrors.Is(err, syscall.ENOSPC):
+		return http.StatusInsufficientStorage, "temporary storage unavailable"
+	case stderrors.Is(err, io.ErrUnexpectedEOF),
+		stderrors.Is(err, stdcontext.Canceled):
+		return http.StatusBadRequest, "upload interrupted"
+	default:
+		return http.StatusBadRequest, "invalid upload request"
+	}
+}
+
+// Filter 从上下文获取用户，同时校验权限并返回表单解析错误。
+func Filter(ctx *context.Context, conn db.Connection) (models.UserModel, bool, bool, error) {
 	var (
 		id float64
 		ok bool
@@ -161,20 +198,25 @@ func Filter(ctx *context.Context, conn db.Connection) (models.UserModel, bool, b
 
 	if err != nil {
 		logger.ErrorCtx(ctx, "retrieve auth user failed %+v", err)
-		return user, false, false
+		return user, false, false, nil
 	}
 
 	if id, ok = ses.Get("user_id").(float64); !ok {
-		return user, false, false
+		return user, false, false, nil
 	}
 
 	user, ok = GetCurUserByID(int64(id), conn)
 
 	if !ok {
-		return user, false, false
+		return user, false, false, nil
 	}
 
-	return user, true, CheckPermissions(user, ctx.Request.URL.String(), ctx.Method(), ctx.PostForm())
+	postForm, err := ctx.PostFormWithError()
+	if err != nil {
+		return user, true, false, err
+	}
+	permissionOK := CheckPermissions(user, ctx.Request.URL.String(), ctx.Method(), postForm)
+	return user, true, permissionOK, nil
 }
 
 const defaultUserIDSesKey = "user_id"
