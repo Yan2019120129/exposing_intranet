@@ -1,11 +1,59 @@
 package context
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"io"
+	"mime/multipart"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/magiconair/properties/assert"
 )
+
+// TestPostForm 保证原有表单 API 保持兼容。
+func TestPostForm(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("name=test"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	values := NewContext(req).PostForm()
+	if values.Get("name") != "test" {
+		t.Fatalf("普通表单字段错误：%q", values.Get("name"))
+	}
+}
+
+// TestPostFormInterruptedMultipart 验证中断的 multipart 请求会返回解析错误。
+func TestPostFormInterruptedMultipart(t *testing.T) {
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	if err := writer.WriteField("__go_admin_t_", "test-token"); err != nil {
+		t.Fatalf("写入测试 token 失败：%v", err)
+	}
+	part, err := writer.CreateFormFile("storage_path", "large.tar.gz")
+	if err != nil {
+		t.Fatalf("创建测试文件字段失败：%v", err)
+	}
+	if _, err = part.Write([]byte("partial file content")); err != nil {
+		t.Fatalf("写入测试文件内容失败：%v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(body.Bytes()))
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	values, err := NewContext(req).PostFormWithError()
+	if err == nil {
+		t.Fatal("中断的 multipart 请求未返回错误")
+	}
+	if !errors.Is(err, io.ErrUnexpectedEOF) {
+		t.Fatalf("中断请求返回了非预期错误：%v", err)
+	}
+	if values != nil {
+		t.Fatalf("解析失败时不应返回表单值：%v", values)
+	}
+}
 
 func TestSlash(t *testing.T) {
 	assert.Equal(t, "/abc", slash("/abc"))

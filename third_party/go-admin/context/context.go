@@ -409,10 +409,26 @@ func (ctx *Context) FormValue(key string) string {
 	return ctx.Request.FormValue(key)
 }
 
-// PostForm get the values of request form.
+// PostForm 获取请求表单值并保持原有接口行为。
 func (ctx *Context) PostForm() url.Values {
 	_ = ctx.Request.ParseMultipartForm(32 << 20)
 	return ctx.Request.PostForm
+}
+
+// PostFormWithError 解析并返回请求表单，供需要处理解析错误的调用方使用。
+func (ctx *Context) PostFormWithError() (url.Values, error) {
+	contentType := strings.ToLower(ctx.Request.Header.Get("Content-Type"))
+	if strings.HasPrefix(contentType, "multipart/form-data") {
+		if err := ctx.Request.ParseMultipartForm(32 << 20); err != nil {
+			return nil, err
+		}
+		return ctx.Request.PostForm, nil
+	}
+
+	if err := ctx.Request.ParseForm(); err != nil {
+		return nil, err
+	}
+	return ctx.Request.PostForm, nil
 }
 
 func (ctx *Context) WantHTML() bool {

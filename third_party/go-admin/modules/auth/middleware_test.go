@@ -1,13 +1,42 @@
 package auth
 
 import (
+	"fmt"
+	"io"
+	"mime/multipart"
+	"net/http"
 	"net/url"
+	"syscall"
 	"testing"
 
 	"github.com/GoAdminGroup/go-admin/modules/config"
 	"github.com/GoAdminGroup/go-admin/plugins/admin/models"
 	"github.com/stretchr/testify/assert"
 )
+
+// TestFormParseErrorResponse 验证上传解析错误会转换为明确且安全的响应。
+func TestFormParseErrorResponse(t *testing.T) {
+	tests := []struct {
+		name        string
+		err         error
+		wantStatus  int
+		wantMessage string
+	}{
+		{name: "请求过大", err: multipart.ErrMessageTooLarge, wantStatus: http.StatusRequestEntityTooLarge, wantMessage: "request body too large"},
+		{name: "上传中断", err: io.ErrUnexpectedEOF, wantStatus: http.StatusBadRequest, wantMessage: "upload interrupted"},
+		{name: "磁盘不足", err: fmt.Errorf("failed to write temporary file: %w", syscall.ENOSPC), wantStatus: http.StatusInsufficientStorage, wantMessage: "temporary storage unavailable"},
+		{name: "其他错误", err: fmt.Errorf("unknown"), wantStatus: http.StatusBadRequest, wantMessage: "invalid upload request"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			status, message := formParseErrorResponse(test.err)
+			if status != test.wantStatus || message != test.wantMessage {
+				t.Fatalf("错误响应为 (%d, %q)，期望 (%d, %q)", status, message, test.wantStatus, test.wantMessage)
+			}
+		})
+	}
+}
 
 func TestCheckPermissions(t *testing.T) {
 
