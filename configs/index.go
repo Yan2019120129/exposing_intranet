@@ -5,6 +5,7 @@ import (
 	"my-base/configs/gorm"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/GoAdminGroup/go-admin/modules/config"
 	"gopkg.in/yaml.v3"
@@ -17,9 +18,19 @@ var (
 
 // Config 服务配置
 type Config struct {
-	Port  string         `yaml:"port"`  // 服务端口
-	Admin *config.Config `yaml:"admin"` // 管理配置信息
-	Gorm  *gorm.Config   `yaml:"gorm"`  // gorm 配置
+	Port      string           `yaml:"port"`       // 服务端口
+	Admin     *config.Config   `yaml:"admin"`      // 管理配置信息
+	Gorm      *gorm.Config     `yaml:"gorm"`       // gorm 配置
+	TusUpload *TusUploadConfig `yaml:"tus_upload"` // 断点续传配置
+}
+
+// TusUploadConfig 定义 tus 断点续传服务配置。
+type TusUploadConfig struct {
+	Enabled     bool   `yaml:"enabled"`
+	Endpoint    string `yaml:"endpoint"`
+	StagingPath string `yaml:"staging_path"`
+	MaxSize     int64  `yaml:"max_size"`
+	Retention   string `yaml:"retention"`
 }
 
 // init 初始化服务端配置
@@ -75,6 +86,23 @@ func GetGorm() *gorm.Config {
 // GetAdmin 获取admin 配置
 func GetAdmin() *config.Config {
 	return c.Admin
+}
+
+// GetTusUpload 获取 tus 断点续传配置。
+func GetTusUpload() *TusUploadConfig {
+	return c.TusUpload
+}
+
+// RetentionDuration 返回残留上传文件的保留时长。
+func (s *TusUploadConfig) RetentionDuration() time.Duration {
+	if s == nil {
+		return 24 * time.Hour
+	}
+	duration, err := time.ParseDuration(s.Retention)
+	if err != nil || duration <= 0 {
+		return 24 * time.Hour
+	}
+	return duration
 }
 
 // GetAdmin 获取服务端管理信息

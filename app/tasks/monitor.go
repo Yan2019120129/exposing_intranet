@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"my-base/app/models"
+	"my-base/configs"
+	fileService "my-base/module/file"
 
 	"github.com/GoAdminGroup/go-admin/modules/logger"
 	"github.com/GoAdminGroup/go-admin/modules/redis"
@@ -45,6 +47,24 @@ func testTableMonitorJob(db *gorm.DB) Job {
 
 			logger.Infof("test table monitor ok: count=%d", count)
 			return nil
+		},
+	}
+}
+
+// tusUploadCleanupJob 定期清理过期的 tus 上传残留文件。
+func tusUploadCleanupJob(db *gorm.DB) Job {
+	return Job{
+		Name:     "tus_upload_cleanup",
+		Interval: time.Hour,
+		Run: func(ctx context.Context) error {
+			if !configs.GetTusUpload().Enabled {
+				return nil
+			}
+			service, err := fileService.NewTusCleanupService(configs.GetTusUpload())
+			if err != nil {
+				return err
+			}
+			return service.Cleanup(ctx, db)
 		},
 	}
 }

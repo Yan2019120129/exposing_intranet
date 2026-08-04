@@ -77,6 +77,7 @@ func Start(ctx context.Context, conn adminDB.Connection) (*Runner, error) {
 	runner := NewRunner(
 		heartbeatJob(),
 		testTableMonitorJob(db),
+		tusUploadCleanupJob(db),
 	)
 	runner.Start(ctx)
 	return runner, nil

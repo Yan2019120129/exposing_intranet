@@ -2,8 +2,6 @@ package tables
 
 import (
 	"errors"
-	"fmt"
-	"html/template"
 	"strconv"
 	"strings"
 	"time"
@@ -11,6 +9,7 @@ import (
 	"my-base/app/models"
 	"my-base/app/service"
 	"my-base/app/service/dto"
+	tablehtml "my-base/app/tables/html"
 	codeService "my-base/code/service"
 
 	"github.com/GoAdminGroup/go-admin/context"
@@ -33,6 +32,7 @@ const (
 // GetSystemFileShareTable 返回系统文件分享记录的后台管理表。
 func GetSystemFileShareTable(ctx *context.Context) table.Table {
 	config := table.NewDefaultTable(ctx, table.DefaultConfigWithDriver("mysql").SetPrimaryKey("id", db.Bigint))
+	systemFileShareHTML := tablehtml.GetSystemFileShare()
 	user := auth.Auth(ctx)
 
 	info := config.GetInfo().HideFilterArea()
@@ -48,7 +48,7 @@ func GetSystemFileShareTable(ctx *context.Context) table.Table {
 	info.AddField("分享链接", "token", db.Varchar).
 		FieldWidth(100).
 		FieldDisplay(func(value types.FieldModel) interface{} {
-			return renderSystemFileShareCopyButton(value.Value)
+			return systemFileShareHTML.CopyButton(value.Value)
 		})
 	info.AddField("到期时间", "expires_at", db.Datetime).FieldFilterable().
 		FieldDisplay(formatSystemFileShareTime)
@@ -59,7 +59,7 @@ func GetSystemFileShareTable(ctx *context.Context) table.Table {
 	info.AddField("撤销时间", "revoked_at", db.Datetime).
 		FieldDisplay(formatSystemFileShareTime)
 	info.AddColumn("状态", func(value types.FieldModel) interface{} {
-		return renderSystemFileShareStatus(value.Row)
+		return systemFileShareHTML.Status(value.Row)
 	}).FieldWidth(65)
 	info.AddField("创建时间", "created_at", db.Datetime).FieldFilterable().
 		FieldDisplay(formatSystemFileShareTime)
@@ -69,7 +69,7 @@ func GetSystemFileShareTable(ctx *context.Context) table.Table {
 		SetDeleteFnWithDB(func(gormDB *gorm.DB, ids []string) error {
 			return revokeSystemFileSharesByDB(gormDB, ids, user.IsSuperAdmin())
 		})
-	info.SetFooterHtml(systemFileShareCopyScript())
+	info.SetFooterHtml(systemFileShareHTML.CopyScript())
 	info.WhereRaw("system_file_id IN (SELECT id FROM system_files WHERE status = 1 AND deleted_at IS NULL" + systemFileShareVisibilityCondition(user.IsSuperAdmin()) + ")")
 
 	formList := config.GetForm()
@@ -217,66 +217,4 @@ func parseSystemFileShareTime(value string) (time.Time, error) {
 		}
 	}
 	return time.Time{}, errors.New("到期时间格式不正确")
-}
-
-// renderSystemFileShareCopyButton 渲染复制分享下载链接的按钮。
-func renderSystemFileShareCopyButton(token string) template.HTML {
-	token = template.HTMLEscapeString(token)
-	return template.HTML(`<button type="button" class="btn btn-xs btn-primary system-file-share-copy-button" data-download-path="/shares/` + token + `/download">复制链接</button>`)
-}
-
-// systemFileShareCopyScript 返回分享链接复制按钮的页面交互脚本。
-func systemFileShareCopyScript() template.HTML {
-	return template.HTML(`
-<script>
-(function () {
-  function copyLink(link) {
-    if (navigator.clipboard && window.isSecureContext) {
-      return navigator.clipboard.writeText(link);
-    }
-    var input = document.createElement('textarea');
-    input.value = link;
-    input.style.position = 'fixed';
-    input.style.opacity = '0';
-    document.body.appendChild(input);
-    input.select();
-    var copied = document.execCommand('copy');
-    document.body.removeChild(input);
-    return copied ? Promise.resolve() : Promise.reject(new Error('copy failed'));
-  }
-
-  $(document).off('click.systemFileShareTableCopy', '.system-file-share-copy-button').on('click.systemFileShareTableCopy', '.system-file-share-copy-button', function () {
-    var button = $(this);
-    var path = button.data('download-path');
-    if (!path) {
-      return;
-    }
-    var link = new URL(path, window.location.origin).toString();
-    var text = button.text();
-    button.prop('disabled', true);
-    copyLink(link).then(function () {
-      button.text('已复制');
-      window.setTimeout(function () {
-        button.text(text);
-      }, 1500);
-      button.prop('disabled', false);
-    }, function () {
-      window.prompt('请复制下载链接', link);
-      button.prop('disabled', false);
-    });
-  });
-}());
-</script>`)
-}
-
-// renderSystemFileShareStatus 根据撤销和到期状态渲染状态标签。
-func renderSystemFileShareStatus(row map[string]interface{}) template.HTML {
-	if row["revoked_at"] != nil && fmt.Sprint(row["revoked_at"]) != "" {
-		return template.HTML(`<span class="label label-default">已撤销</span>`)
-	}
-	expiresAt, err := parseSystemFileShareTime(fmt.Sprint(row["expires_at"]))
-	if err != nil || !expiresAt.After(time.Now()) {
-		return template.HTML(`<span class="label label-warning">已过期</span>`)
-	}
-	return template.HTML(`<span class="label label-success">有效</span>`)
 }
