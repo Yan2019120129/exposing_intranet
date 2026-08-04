@@ -41,7 +41,7 @@ jobs:
       - name: Verify Go toolchain
         shell: bash
         run: |
-          expected='go1.25.12'
+          expected='go1.26.5'
           actual="$(go env GOVERSION)"
           if [[ "${actual}" != "${expected}" ]]; then
             echo "Go 工具链版本错误：${actual}，期望：${expected}"
