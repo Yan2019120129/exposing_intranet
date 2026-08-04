@@ -19,12 +19,12 @@ var (
 
 // Config 服务配置
 type Config struct {
-	Port       string         `yaml:"port"`       // 服务端口
-	Admin      *config.Config `yaml:"admin"`      // 管理配置信息
-	Gorm       *gorm.Config   `yaml:"gorm"`       // gorm 配置
-	ListenPort string         `yaml:"listenPort"` // 监听端口
-	Connect    *ConnectConfig `yaml:"connect"`    // 连接配置
-	TusUpload *TusUploadConfig `yaml:"tus_upload"` // 断点续传配置
+	Port       string           `yaml:"port"`       // 服务端口
+	Admin      *config.Config   `yaml:"admin"`      // 管理配置信息
+	Gorm       *gorm.Config     `yaml:"gorm"`       // gorm 配置
+	ListenPort string           `yaml:"listenPort"` // 监听端口
+	Connect    *ConnectConfig   `yaml:"connect"`    // 连接配置
+	TusUpload  *TusUploadConfig `yaml:"tus_upload"` // 断点续传配置
 }
 
 // ConnectConfig 连接配置
