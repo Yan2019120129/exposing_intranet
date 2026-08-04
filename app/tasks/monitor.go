@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"my-base/app/models"
+	fileService "my-base/code/file"
 	"my-base/configs"
-	fileService "my-base/module/file"
 
 	"github.com/GoAdminGroup/go-admin/modules/logger"
 	"github.com/GoAdminGroup/go-admin/modules/redis"

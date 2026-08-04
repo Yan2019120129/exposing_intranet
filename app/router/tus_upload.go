@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	fileService "my-base/module/file"
+	fileService "my-base/code/file"
 
 	adminModels "github.com/GoAdminGroup/go-admin/plugins/admin/models"
 	"github.com/gin-gonic/gin"

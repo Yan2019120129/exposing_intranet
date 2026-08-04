@@ -10,8 +10,8 @@ import (
 
 	"my-base/app/models"
 	tablehtml "my-base/app/tables/html"
+	fileService "my-base/code/file"
 	"my-base/configs"
-	fileService "my-base/module/file"
 
 	"github.com/GoAdminGroup/go-admin/context"
 	"github.com/GoAdminGroup/go-admin/modules/auth"
