@@ -33,9 +33,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          # Go 1.25.12 修复 crypto/tls、net/textproto、crypto/x509
-          # 和 html/template 的当前 govulncheck 报告。
-          go-version: '1.25.12'
+          go-version: '1.26.5'
           check-latest: true
           cache: true
           cache-dependency-path: go.sum
