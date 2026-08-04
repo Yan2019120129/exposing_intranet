@@ -16,6 +16,19 @@ connect:
   wait-conn-timeout: 15    # 等待连接超时清理（秒）
 
 
+# tus 断点续传配置
+tus_upload:
+  # 是否启用断点续传上传
+  enabled: true
+  # tus 协议访问路径，必须以斜杠结尾
+  endpoint: "/admin/files/tus/"
+  # 未认领上传文件的暂存目录
+  staging_path: "./website/data/tus"
+  # 单文件大小上限，0 表示不限制
+  max_size: 0
+  # 未完成或未认领文件的保留时间
+  retention: "24h"
+
 gorm:
   # 是否启用全字段查询
   query-fields: true

@@ -43,6 +43,7 @@ website/db/*.sql
 
 # User uploads and generated public assets
 website/public/uploads/
+website/data/tus/
 
 # Temporary files
 tmp/

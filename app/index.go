@@ -11,6 +11,7 @@ import (
 	"my-base/code"
 	"my-base/code/penetrate"
 	"my-base/configs"
+	fileService "my-base/module/file"
 	"my-base/pages"
 	"net/http"
 	"os"
@@ -39,6 +40,15 @@ func StartServer() error {
 	template.AddComp(chartjs.NewChart())
 
 	eng := engine.Default()
+	var tusServer *fileService.TusServer
+
+	if configs.GetTusUpload().Enabled {
+		var err error
+		tusServer, err = fileService.NewTusServer(configs.GetTusUpload())
+		if err != nil {
+			panic(err)
+		}
+	}
 
 	if err := eng.AddConfig(configs.GetAdmin()).
 		AddGenerators(tables.Generators).
@@ -58,6 +68,10 @@ func StartServer() error {
 	r.Static(cfg.Admin.AssetRootPath, cfg.Admin.Store.Path)
 
 	router.InitRouter(r, router.AdminAuthMiddleware)
+	if tusServer != nil {
+		router.RegisterTusUploadRouter(r, configs.GetTusUpload().Endpoint, tusServer)
+		r.StaticFile("/assets/vendor/tus.min.js", "./website/public/vendor/tus-js-client/tus.min.js")
+	}
 
 	eng.HTML("GET", cfg.Admin.Prefix(), pages.GetDashBoard)
 

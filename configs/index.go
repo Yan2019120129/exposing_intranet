@@ -5,6 +5,7 @@ import (
 	"my-base/configs/gorm"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/GoAdminGroup/go-admin/modules/config"
 	"gopkg.in/yaml.v3"
@@ -23,6 +24,7 @@ type Config struct {
 	Gorm       *gorm.Config   `yaml:"gorm"`       // gorm 配置
 	ListenPort string         `yaml:"listenPort"` // 监听端口
 	Connect    *ConnectConfig `yaml:"connect"`    // 连接配置
+	TusUpload *TusUploadConfig `yaml:"tus_upload"` // 断点续传配置
 }
 
 // ConnectConfig 连接配置
@@ -34,6 +36,15 @@ type ConnectConfig struct {
 	TCPKeepAlive     int `yaml:"tcp-keepalive"`     // TCP Keep-Alive 间隔（秒）
 	ReadWriteTimeout int `yaml:"readwrite-timeout"` // 数据转发读写超时（秒）
 	WaitConnTimeout  int `yaml:"wait-conn-timeout"` // 等待连接超时清理（秒）
+}
+
+// TusUploadConfig 定义 tus 断点续传服务配置。
+type TusUploadConfig struct {
+	Enabled     bool   `yaml:"enabled"`
+	Endpoint    string `yaml:"endpoint"`
+	StagingPath string `yaml:"staging_path"`
+	MaxSize     int64  `yaml:"max_size"`
+	Retention   string `yaml:"retention"`
 }
 
 const (
@@ -187,6 +198,23 @@ func GetAdmin() *config.Config {
 		return nil
 	}
 	return c.Admin
+}
+
+// GetTusUpload 获取 tus 断点续传配置。
+func GetTusUpload() *TusUploadConfig {
+	return c.TusUpload
+}
+
+// RetentionDuration 返回残留上传文件的保留时长。
+func (s *TusUploadConfig) RetentionDuration() time.Duration {
+	if s == nil {
+		return 24 * time.Hour
+	}
+	duration, err := time.ParseDuration(s.Retention)
+	if err != nil || duration <= 0 {
+		return 24 * time.Hour
+	}
+	return duration
 }
 
 // GetAdmin 获取服务端管理信息
